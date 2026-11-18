@@ -85,7 +85,7 @@
     <div class="row" style="margin-top:10px">
       <button type="button" id="giveup">Give up</button>
       <label class="sub" style="margin-left:auto">
-        <input type="checkbox" id="numeric"> type the answer instead
+        <input type="checkbox" id="numeric"> typed answers (no multiple choice)
       </label>
     </div>
     <div id="feedback" aria-live="polite"></div>
@@ -115,12 +115,22 @@
 import { AXES, MIN_FOR_VERDICT, checkAnswer, score, workOnNext } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
+const MODE_KEY = "quant-drill.mode.v1";
 const $ = (id) => document.getElementById(id);
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
 const save = (h) => localStorage.setItem(KEY, JSON.stringify(h));
 let bank = [], q = null, t0 = 0, tick = null, done = false;
 
 for (const a of AXES) $("axis").add(new Option(a, a));
+
+// The answer mode is a SETTING, not a per-question checkbox: it has to survive a reload,
+// or "turn multiple choice off" lasts until you close the tab. localStorage can throw in
+// a private window, so a failure here must leave the default working rather than break
+// the page.
+try { $("numeric").checked = localStorage.getItem(MODE_KEY) === "numeric"; } catch {}
+function saveMode() {
+  try { localStorage.setItem(MODE_KEY, $("numeric").checked ? "numeric" : "mc"); } catch {}
+}
 
 function pick() {
   const ax = $("axis").value, d = $("diff").value;
@@ -209,7 +219,7 @@ function finish(given, correct, errorKind) {
   render();
 }
 
-$("numeric").addEventListener("change", () => { if (!done) renderChoices(); });
+$("numeric").addEventListener("change", () => { saveMode(); if (!done) renderChoices(); });
 $("form").addEventListener("submit", (e) => {
   e.preventDefault();
   if (done) return ask();

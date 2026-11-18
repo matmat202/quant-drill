@@ -37,13 +37,31 @@ const median = (xs) => {
 const shrunk = (rs) => rs.reduce((a, b) => a + b, 0) / (rs.length + K);
 const num = (c) => (c ? 1 : 0);
 
+// Correction for guessing. A multiple-choice question has a 1-in-4 floor: answered at
+// random it is right a quarter of the time, where a typed answer is right essentially
+// never. Counting both as a plain 1 would inflate every axis the moment the user switches
+// mode, and the radar's whole job is to compare axes against each other.
+//
+// So an MC attempt earns the standard chance-corrected credit, (p - 1/4) / (3/4): 1 for
+// right, -1/3 for wrong, which makes a pure guesser score 0 on average -- exactly what a
+// typed wrong answer scores. Attempts recorded before the mode existed carry no `mode`
+// field and were all typed, so they default to the uncorrected scale, which is correct.
+const MC_OPTIONS = 4;
+export function credit(a) {
+  const right = num(a.correct);
+  if (a.mode !== "mc") return right;
+  const g = 1 / MC_OPTIONS;
+  return (right - g) / (1 - g);
+}
+
+
 export function score(attempts) {
   const out = {};
   if (!attempts.length) {
     for (const a of AXES) out[a] = { axis: a, n: 0, n_correct: 0, accuracy: NaN, speed: null, raw_accuracy: null, median_seconds: null };
     return out;
   }
-  const overall = attempts.reduce((s, a) => s + num(a.correct), 0) / attempts.length;
+  const overall = attempts.reduce((s, a) => s + credit(a), 0) / attempts.length;
   const byD = new Map();
   for (const a of attempts) {
     if (!byD.has(a.difficulty)) byD.set(a.difficulty, []);
@@ -53,13 +71,13 @@ export function score(attempts) {
   const correct = attempts.filter((a) => a.correct);
   const globLt = correct.length ? median(correct.map((a) => Math.log(a.seconds))) : null;
   for (const [d, xs] of byD) {
-    baseAcc.set(d, overall + shrunk(xs.map((a) => num(a.correct) - overall)));
+    baseAcc.set(d, overall + shrunk(xs.map((a) => credit(a) - overall)));
     const lts = xs.filter((a) => a.correct).map((a) => Math.log(a.seconds));
     baseLt.set(d, lts.length ? median(lts) : globLt);
   }
   for (const axis of AXES) {
     const xs = attempts.filter((a) => a.axis === axis);
-    const accuracy = Math.min(1, Math.max(0, overall + shrunk(xs.map((a) => num(a.correct) - baseAcc.get(a.difficulty)))));
+    const accuracy = Math.min(1, Math.max(0, overall + shrunk(xs.map((a) => credit(a) - baseAcc.get(a.difficulty)))));
     const cs = xs.filter((a) => a.correct);
     const speed = cs.length ? 1 / (1 + Math.exp(shrunk(cs.map((a) => Math.log(a.seconds) - baseLt.get(a.difficulty))))) : null;
     out[axis] = {
