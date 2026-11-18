@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quant drill</title>
+<style>
+  :root {
+    --bg: #fcfcfb; --ink: #1d1d1b; --ink-2: #5b5b57; --line: #e3e3df; --card: #ffffff;
+    --acc: #2a78d6; --spd: #eb6834; --good: #1a7f37; --bad: #c62828;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1a1a19; --ink: #ececea; --ink-2: #a3a39e; --line: #3a3a37; --card: #222220;
+            --acc: #3987e5; --spd: #d95926; --good: #4caf50; --bad: #ef6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--ink-2); margin: 0 0 18px; font-size: 14px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  /* A file input carries a wide intrinsic minimum (its button plus a filename),
+     and a flex item defaults to min-width:auto, so the Import label held the row
+     at 412px on a 360px phone under 200% text (2026-11-17). */
+  .row label { min-width: 0; max-width: 100%; }
+  .row input[type=file] { max-width: 100%; }
+  select, input, button { font: inherit; color: inherit; background: var(--card); border: 1px solid var(--line);
+                          border-radius: 6px; padding: 6px 10px; }
+  button { cursor: pointer; }
+  button.primary { background: var(--acc); color: #fff; border-color: var(--acc); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin: 16px 0; }
+  .meta { color: var(--ink-2); font-size: 13px; display: flex; justify-content: space-between; }
+  #qtext { font-size: 18px; margin: 10px 0 14px; overflow-wrap: anywhere; }
+  #answer { width: 180px; }
+  #mcpad { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 4px; }
+  @media (max-width: 460px) { #mcpad { grid-template-columns: 1fr; } }
+  #mcpad button { text-align: left; font-variant-numeric: tabular-nums; padding: 10px 12px; }
+  #mcpad button.picked-ok { border-color: var(--good); color: var(--good); font-weight: 600; }
+  #mcpad button.picked-no { border-color: var(--bad); color: var(--bad); font-weight: 600; }
+  #mcpad button.was-right { border-color: var(--good); }
+  #timer { font-variant-numeric: tabular-nums; }
+  #feedback { margin-top: 12px; min-height: 1.5em; }
+  #feedback .ok { color: var(--good); font-weight: 600; }
+  #feedback .no { color: var(--bad); font-weight: 600; }
+  #feedback code { display: block; margin-top: 6px; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
+  h2 { font-size: 17px; margin: 28px 0 6px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--ink-2); }
+  .sw { display: inline-block; width: 22px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 6px; }
+  svg text { fill: var(--ink-2); font-size: 12px; }
+  svg .lbl { fill: var(--ink); font-size: 13px; }
+  #tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  td.thin { color: var(--ink-2); }
+  #next { margin: 10px 0; }
+  @media (max-width: 480px) {
+    svg text { font-size: 15px; } svg .lbl { font-size: 17px; }
+    th, td { padding: 4px 4px; font-size: 13px; }
+  }
+  .small { font-size: 13px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Quant drill</h1>
+  <p class="sub">Generated probability questions with exactly computed answers. Your history stays in this browser.</p>
+
+  <div class="row">
+    <label>Axis <select id="axis"><option value="">mixed</option></select></label>
+    <label>Difficulty <select id="diff">
+      <option value="">mixed</option><option value="1">1 warm-up</option>
+      <option value="2">2 interview</option><option value="3">3 hard</option></select></label>
+    <button id="new">New question</button>
+  </div>
+
+  <div class="card" id="qcard">
+    <div class="meta"><span id="qmeta">loading the question bank…</span><span id="timer"></span></div>
+    <div id="qtext"></div>
+    <div id="mcpad" role="group" aria-label="choose an answer"></div>
+    <form id="form" class="row" autocomplete="off" hidden>
+      <input id="answer" inputmode="decimal" placeholder="3/8, 0.375 or 37.5%" aria-label="your answer">
+      <button class="primary" type="submit">Check</button>
+    </form>
+    <div class="row" style="margin-top:10px">
+      <button type="button" id="giveup">Give up</button>
+      <label class="sub" style="margin-left:auto">
+        <input type="checkbox" id="numeric"> type the answer instead
+      </label>
+    </div>
+    <div id="feedback" aria-live="polite"></div>
+  </div>
+
+  <h2>Where you stand</h2>
+  <div class="legend">
+    <span><span class="sw" style="border-color:var(--acc)"></span>accuracy</span>
+    <span><span class="sw" style="border-color:var(--spd);border-top-style:dashed"></span>speed</span>
+    <span>○ hollow: under 5 attempts, mostly prior</span>
+  </div>
+  <svg id="radar" viewBox="-245 -170 490 340" width="100%" style="max-width:460px;display:block;margin:auto"
+       role="img" aria-label="radar chart of accuracy and speed per axis"></svg>
+  <p id="next"></p>
+  <div id="tablewrap"><table id="table"><thead><tr><th>axis</th><th>n</th><th>raw</th><th>accuracy</th><th>speed</th><th>med s</th></tr></thead><tbody></tbody></table></div>
+  <p class="small">Accuracy is shrunk toward your overall rate (a prior worth 8 attempts) and measured against
+    your own accuracy at each difficulty, so an axis with few attempts sits near the middle rather than at an
+    extreme. Speed is over correct answers only, relative to your usual time at that difficulty: 0.5 is your
+    usual pace and lower is slower. Faded axes have fewer than 5 attempts.</p>
+  <div class="row small">
+    <button id="export">Export history</button>
+    <label>Import <input type="file" id="import" accept=".json,application/json"></label>
+    <span id="count"></span>
+  </div>
+</main>
+<script type="module">
+import { AXES, MIN_FOR_VERDICT, checkAnswer, score, workOnNext } from "./quant.mjs";
+
+const KEY = "quant-drill.history.v1";
+const $ = (id) => document.getElementById(id);
+const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+const save = (h) => localStorage.setItem(KEY, JSON.stringify(h));
+let bank = [], q = null, t0 = 0, tick = null, done = false;
+
+for (const a of AXES) $("axis").add(new Option(a, a));
+
+function pick() {
+  const ax = $("axis").value, d = $("diff").value;
+  // Choose the axis and tier first, then a question within it, so conditional's ~3.6k
+  // variants do not crowd out expectation's 27.
+  const axis = ax || AXES[Math.floor(Math.random() * AXES.length)];
+  const tier = d ? +d : [1, 2, 2, 3][Math.floor(Math.random() * 4)];
+  const pool = bank.filter((x) => x.axis === axis && x.d === tier);
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function ask() {
+  q = pick(); done = false;
+  $("qmeta").textContent = `${q.axis} · difficulty ${q.d}`;
+  $("qtext").textContent = q.text;
+  $("answer").value = ""; $("feedback").textContent = "";
+  renderChoices();
+  if (numericMode()) $("answer").focus();
+  t0 = performance.now(); clearInterval(tick);
+  tick = setInterval(() => { $("timer").textContent = `${Math.floor((performance.now() - t0) / 1000)}s`; }, 250);
+}
+
+// Multiple choice is the default (user, 2026-11-17). Each distractor is the answer a
+// NAMED mistake produces -- the complement, a missing factor of two, squaring a
+// dependent draw -- so eliminating them needs the same reasoning as deriving the answer.
+// Questions whose value admits fewer than three distinct plausible errors carry no `mc`
+// block and fall back to typing, rather than offering a guessable short list.
+const numericMode = () => $("numeric").checked || !q || !q.mc;
+
+function renderChoices() {
+  const pad = $("mcpad");
+  pad.textContent = "";
+  const useMC = !numericMode();
+  pad.hidden = !useMC;
+  $("form").hidden = useMC;
+  if (!useMC) return;
+  q.mc.options.forEach((v, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = `${"ABCD"[i]}.  ${(+v).toFixed(4)}`;
+    b.dataset.i = String(i);
+    b.addEventListener("click", () => {
+      if (done) return;
+      const right = i === q.mc.correct_index;
+      [...pad.children].forEach((c, k) => {
+        if (k === q.mc.correct_index) c.classList.add("was-right");
+        c.disabled = true;
+      });
+      b.classList.add(right ? "picked-ok" : "picked-no");
+      finish(String(v), right, right ? null : q.mc.errors[i]);
+    });
+    pad.appendChild(b);
+  });
+}
+
+function finish(given, correct, errorKind) {
+  done = true; clearInterval(tick);
+  const seconds = Math.round((performance.now() - t0) / 100) / 10;
+  const h = load();
+  h.push({ t: Date.now() / 1000, axis: q.axis, difficulty: q.d, qid: q.qid, answer: q.answer,
+           given, correct, seconds, mode: numericMode() ? "numeric" : "mc",
+           error_kind: errorKind || null });
+  save(h);
+  const fb = $("feedback"); fb.textContent = "";
+  const verdict = document.createElement("span");
+  verdict.className = correct ? "ok" : "no";
+  verdict.textContent = `${correct ? "Right" : given === null ? "Given up" : "Wrong"} in ${seconds}s.`;
+  const code = document.createElement("code");
+  // A no-calculator birthday answer is a ~150-digit fraction; show it only when readable.
+  const exact = q.answer.length <= 24 ? `${q.answer} = ` : "";
+  // Naming the mistake is the point of building distractors from error patterns: "that
+  // is the complement" tells you what to fix, where "wrong" tells you nothing.
+  const MISTAKE = {
+    complement: "that is 1 - p: the complement, not the event asked for",
+    double: "that is twice the answer - a factor counted once too often",
+    half: "that is half the answer - a factor dropped",
+    square: "that is p squared - treating dependent draws as independent",
+    sqrt: "that is the square root of the answer",
+    odds: "that is the ODDS p/(1-p), not the probability",
+    off_by_one_up: "that is off by one in a count, too high",
+    off_by_one_down: "that is off by one in a count, too low",
+  };
+  code.textContent = (errorKind && MISTAKE[errorKind] ? MISTAKE[errorKind] + "\n" : "")
+    + `answer ${exact}${q.value.toFixed(4)}\n${q.working}`;
+  fb.append(verdict, ` Press Enter for the next one.`, code);
+  render();
+}
+
+$("numeric").addEventListener("change", () => { if (!done) renderChoices(); });
+$("form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  if (done) return ask();
+  const ok = checkAnswer(q, $("answer").value);
+  if (ok === null) { $("feedback").textContent = "A number please: 3/8, 0.375 or 37.5%."; return; }
+  finish($("answer").value.trim(), ok);
+});
+$("giveup").onclick = () => { if (!done) finish(null, false); };
+$("new").onclick = ask;
+$("axis").onchange = $("diff").onchange = ask;
+
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+  parent.appendChild(e); return e;
+}
+
+function render() {
+  const hist = load(), s = score(hist), svg = $("radar");
+  svg.textContent = "";
+  const R = 120, ang = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / 6;
+  const pt = (i, r) => [r * R * Math.cos(ang(i)), r * R * Math.sin(ang(i))];
+  for (const ring of [0.25, 0.5, 0.75, 1]) {
+    el("polygon", { points: AXES.map((_, i) => pt(i, ring).join(",")).join(" "), fill: "none",
+                    stroke: "var(--line)", "stroke-width": ring === 0.5 ? 1.5 : 1 }, svg);
+  }
+  el("text", { x: 4, y: -0.5 * R - 3 }, svg).textContent = "0.5";
+  AXES.forEach((a, i) => {
+    const thin = s[a].n < MIN_FOR_VERDICT;
+    el("line", { x1: 0, y1: 0, x2: pt(i, 1)[0], y2: pt(i, 1)[1], stroke: "var(--line)" }, svg);
+    const [x, y] = pt(i, 1.2);
+    const t = el("text", { x, y, "text-anchor": Math.abs(x) < 5 ? "middle" : x > 0 ? "start" : "end",
+                           "dominant-baseline": "middle", class: "lbl", opacity: thin ? 0.5 : 1 }, svg);
+    t.textContent = a;
+    el("tspan", { x, dy: 15, class: "" }, t).textContent = `n=${s[a].n}${thin ? " · thin" : ""}`;
+  });
+  const series = [["accuracy", "var(--acc)", ""], ["speed", "var(--spd)", "6 4"]];
+  for (const [key, color, dash] of series) {
+    const vals = AXES.map((a) => s[a][key]);
+    if (vals.every((v) => v === null || Number.isNaN(v))) continue;
+    // No data on an axis means the score IS the prior: draw it there (hollow), not at 0,
+    // which would read as "very slow" or "always wrong".
+    const shown = vals.map((v) => (v === null || Number.isNaN(v) ? 0.5 : v));
+    const pts = shown.map((v, i) => pt(i, v));
+    el("polygon", { points: pts.map((p) => p.join(",")).join(" "), fill: color, "fill-opacity": 0.12,
+                    stroke: color, "stroke-width": 2, "stroke-dasharray": dash, "stroke-linejoin": "round" }, svg);
+    vals.forEach((v, i) => {
+      const thin = s[AXES[i]].n < MIN_FOR_VERDICT || v === null;
+      const c = el("circle", { cx: pts[i][0], cy: pts[i][1], r: 4.5, fill: thin ? "var(--bg)" : color,
+                               stroke: color, "stroke-width": 2 }, svg);
+      el("title", {}, c).textContent = v === null ? `${AXES[i]} ${key}: no correct answers yet` : `${AXES[i]} ${key}: ${key === "accuracy" ? Math.round(v * 100) + "%" : v.toFixed(2)} (n=${s[AXES[i]].n})`;
+    });
+  }
+  const tb = $("table").tBodies[0]; tb.textContent = "";
+  for (const a of AXES) {
+    const x = s[a], tr = tb.insertRow();
+    const cells = [a, x.n, x.raw_accuracy === null ? "" : Math.round(x.raw_accuracy * 100) + "%",
+                   x.n ? Math.round(x.accuracy * 100) + "%" : "", x.speed === null ? "" : x.speed.toFixed(2),
+                   x.median_seconds === null ? "" : Math.round(x.median_seconds)];
+    cells.forEach((c) => { const td = tr.insertCell(); td.textContent = c; if (x.n < MIN_FOR_VERDICT) td.className = "thin"; });
+  }
+  $("next").textContent = hist.length ? `Work on next: ${workOnNext(s).join(" — ")}` : "Answer a few questions to see your radar.";
+  $("count").textContent = `${hist.length} attempts stored in this browser`;
+}
+
+$("export").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(load(), null, 1)], { type: "application/json" }));
+  a.download = `quant-drill-history-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+};
+$("import").onchange = async (e) => {
+  const got = JSON.parse(await e.target.files[0].text());
+  const seen = new Set(load().map((x) => `${x.t}|${x.qid}`));
+  save([...load(), ...got.filter((x) => !seen.has(`${x.t}|${x.qid}`))].sort((a, b) => a.t - b.t));
+  render();
+};
+
+fetch("bank.json").then((r) => r.json()).then((b) => { bank = b.questions; ask(); render(); });
+</script>
+</body>
+</html>
