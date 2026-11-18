@@ -128,7 +128,11 @@ const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
 const $ = (id) => document.getElementById(id);
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
-const save = (h) => localStorage.setItem(KEY, JSON.stringify(h));
+// setItem throws when storage is blocked (Safari "Block All Cookies") or full. Unguarded,
+// that throw landed inside finish() after the timer stopped, so the verdict and working
+// never rendered and nothing said the attempt was lost. Return whether it stuck instead.
+const save = (h) => { try { localStorage.setItem(KEY, JSON.stringify(h)); return true; } catch { return false; } };
+const NOT_SAVED = "Not saved: this browser refused to store your history (storage blocked, private mode or full), so this attempt will not count toward the radar.";
 let bank = [], q = null, t0 = 0, tick = null, done = false;
 
 for (const a of AXES) $("axis").add(new Option(a, a));
@@ -203,7 +207,7 @@ function finish(given, correct, errorKind) {
   h.push({ t: Date.now() / 1000, axis: q.axis, difficulty: q.d, qid: q.qid, answer: q.answer,
            given, correct, seconds, mode: numericMode() ? "numeric" : "mc",
            error_kind: errorKind || null });
-  save(h);
+  const kept = save(h);
   const fb = $("feedback"); fb.textContent = "";
   const verdict = document.createElement("span");
   verdict.className = correct ? "ok" : "no";
@@ -226,6 +230,11 @@ function finish(given, correct, errorKind) {
   code.textContent = (errorKind && MISTAKE[errorKind] ? MISTAKE[errorKind] + "\n" : "")
     + `answer ${exact}${q.value.toFixed(4)}\n${q.working}`;
   fb.append(verdict, ` Press Enter for the next one.`, code);
+  if (!kept) {
+    const warn = document.createElement("p");
+    warn.className = "no"; warn.id = "notsaved"; warn.textContent = NOT_SAVED;
+    fb.append(warn);
+  }
   render();
 }
 
@@ -304,8 +313,9 @@ $("export").onclick = () => {
 $("import").onchange = async (e) => {
   const got = JSON.parse(await e.target.files[0].text());
   const seen = new Set(load().map((x) => `${x.t}|${x.qid}`));
-  save([...load(), ...got.filter((x) => !seen.has(`${x.t}|${x.qid}`))].sort((a, b) => a.t - b.t));
+  const kept = save([...load(), ...got.filter((x) => !seen.has(`${x.t}|${x.qid}`))].sort((a, b) => a.t - b.t));
   render();
+  if (!kept) $("count").textContent = NOT_SAVED;
 };
 
 fetch("bank.json").then((r) => r.json()).then((b) => { bank = b.questions; ask(); render(); });
