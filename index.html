@@ -68,7 +68,10 @@
     svg text { font-size: 15px; } svg .lbl { font-size: 17px; }
     th, td { padding: 4px 4px; font-size: 13px; }
   }
-  .small { font-size: 13px; color: var(--ink-2); }
+  /* 13px inside a 760px main is 125 characters per line, which line-measure's
+     90 cpl bound catches at 1440 and 1920. The cap is on the measure, not the
+     font size: shrinking main would reflow every other block on the page. */
+  .small { font-size: 13px; color: var(--ink-2); max-width: 62ch; }
 </style>
 </head>
 <body>
