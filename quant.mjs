@@ -103,3 +103,106 @@ export function workOnNext(scores) {
   if (slow && slow.axis !== s.axis && slow.speed < 0.4) reason += `; slowest is ${slow.axis} (speed ${slow.speed.toFixed(2)})`;
   return [s.axis, reason];
 }
+
+// --- skills -------------------------------------------------------------------------
+// The radar scores what a question EXERCISES, not what it is about. A question loads on
+// several skills summing to 1 and contributes fractional attempts to each, so a
+// markov-only session still says something about setup and execution instead of leaving
+// five vertices empty. Topic survives as a table, not a second hexagon.
+// This is score() with counts replaced by weight sums; fed a one-hot table it reproduces
+// score() exactly, which is what tests/test_skills.py asserts.
+
+export const SKILLS = ["setup", "counting", "conditioning", "linearity", "approximation", "execution"];
+export const SLIP = new Set(["double", "half", "square", "sqrt", "off_by_one_up", "off_by_one_down"]);
+export const CONCEPT = new Set(["complement", "odds"]);
+export const EXEC_SHIFT = 0.5;
+
+export const ACTIVITY = {
+  setup: "Stop before computing: write the sample space, state or recursion, check it, then solve. Drill the first thirty seconds, not the whole problem.",
+  counting: "Enumeration and symmetry: count the same set two ways and make them agree, and name the bijection before trusting it.",
+  conditioning: "Condition on the right thing — tower rule and first-step analysis. Write P(A|B) and P(B|A) side by side every time.",
+  linearity: "Decompose into indicators. Most of these get easy the moment you stop hunting for the distribution and just add up expectations.",
+  approximation: "No-calculator work: e^-λ, 1/e, orders of magnitude. Estimation at difficulty 3 is the whole axis.",
+  execution: "Not a gap in method — redo problems you ALREADY got right, against a clock. More new problems will not fix this one.",
+};
+
+// Re-aim one attempt's evidence using the mistake it actually made. A right answer, or a
+// wrong one we cannot classify, is left alone. A slip is half evidence about execution. A
+// wrong QUANTITY is not evidence about arithmetic at all, so execution is dropped and the
+// rest renormalised -- otherwise every conceptual miss would also say "your arithmetic is bad".
+export function route(vec, correct, errorKind) {
+  const out = {};
+  if (correct || !errorKind) { for (const s of SKILLS) out[s] = vec[s] || 0; return out; }
+  if (SLIP.has(errorKind)) {
+    for (const s of SKILLS) out[s] = (1 - EXEC_SHIFT) * (vec[s] || 0) + EXEC_SHIFT * (s === "execution" ? 1 : 0);
+    return out;
+  }
+  if (CONCEPT.has(errorKind)) {
+    const rest = SKILLS.reduce((t, s) => t + (s === "execution" ? 0 : (vec[s] || 0)), 0);
+    if (rest <= 0) { for (const s of SKILLS) out[s] = vec[s] || 0; return out; }
+    for (const s of SKILLS) out[s] = s === "execution" ? 0 : (vec[s] || 0) / rest;
+    return out;
+  }
+  for (const s of SKILLS) out[s] = vec[s] || 0;
+  return out;
+}
+
+const wShrunk = (pairs, k = K) =>
+  pairs.reduce((t, [w, r]) => t + w * r, 0) / (pairs.reduce((t, [w]) => t + w, 0) + k);
+
+// `weigh(attempt)` returns {skill: weight} summing to 1.
+export function skillScore(attempts, weigh) {
+  const out = {};
+  if (!attempts.length) {
+    for (const s of SKILLS) out[s] = { skill: s, n: 0, n_correct: 0, accuracy: NaN, speed: null, raw_accuracy: null, median_seconds: null };
+    return out;
+  }
+  const overall = attempts.reduce((t, a) => t + credit(a), 0) / attempts.length;
+  const byD = new Map();
+  for (const a of attempts) {
+    if (!byD.has(a.difficulty)) byD.set(a.difficulty, []);
+    byD.get(a.difficulty).push(a);
+  }
+  const baseAcc = new Map(), baseLt = new Map();
+  const correct = attempts.filter((a) => a.correct);
+  const globLt = correct.length ? median(correct.map((a) => Math.log(a.seconds))) : null;
+  for (const [d, xs] of byD) {
+    baseAcc.set(d, overall + shrunk(xs.map((a) => credit(a) - overall)));
+    const lts = xs.filter((a) => a.correct).map((a) => Math.log(a.seconds));
+    baseLt.set(d, lts.length ? median(lts) : globLt);
+  }
+  const weighed = attempts.map((a) => [a, weigh(a)]);
+  for (const s of SKILLS) {
+    const xs = weighed.filter(([, v]) => (v[s] || 0) > 0);
+    const n = xs.reduce((t, [, v]) => t + v[s], 0);
+    const accuracy = Math.min(1, Math.max(0, overall +
+      wShrunk(xs.map(([a, v]) => [v[s], credit(a) - baseAcc.get(a.difficulty)]))));
+    const cs = xs.filter(([a]) => a.correct);
+    const nc = cs.reduce((t, [, v]) => t + v[s], 0);
+    const speed = cs.length
+      ? 1 / (1 + Math.exp(wShrunk(cs.map(([a, v]) => [v[s], Math.log(a.seconds) - baseLt.get(a.difficulty)]))))
+      : null;
+    out[s] = {
+      skill: s, n, n_correct: nc, accuracy, speed,
+      raw_accuracy: n > 0 ? nc / n : null,
+      median_seconds: cs.length ? median(cs.map(([a]) => a.seconds)) : null,
+    };
+  }
+  return out;
+}
+
+// (skill, why, what to actually do). Thin evidence outranks measured weakness.
+export function skillWorkOnNext(scores) {
+  const all = SKILLS.map((s) => scores[s]);
+  const thin = all.filter((s) => s.n < MIN_FOR_VERDICT);
+  if (thin.length) {
+    const s = thin.reduce((a, b) => (b.n < a.n ? b : a));
+    return [s.skill, `only ${s.n.toFixed(1)} attempts' worth -- not enough to know`, ACTIVITY[s.skill]];
+  }
+  const s = all.reduce((a, b) => (b.accuracy < a.accuracy ? b : a));
+  let why = `lowest accuracy (${Math.round(s.accuracy * 100)}% adjusted, over ${s.n.toFixed(1)} attempts' worth)`;
+  const timed = all.filter((x) => x.speed !== null);
+  const slow = timed.length ? timed.reduce((a, b) => (b.speed < a.speed ? b : a)) : null;
+  if (slow && slow.skill !== s.skill && slow.speed < 0.4) why += `; slowest is ${slow.skill} (speed ${slow.speed.toFixed(2)})`;
+  return [s.skill, why, ACTIVITY[s.skill]];
+}

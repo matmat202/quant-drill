@@ -59,6 +59,8 @@
   svg text { fill: var(--ink-2); font-size: 12px; }
   svg .lbl { fill: var(--ink); font-size: 13px; }
   #tablewrap { overflow-x: auto; }
+  .act { margin: 2px 0 0; padding-left: 10px; border-left: 2px solid var(--acc); max-width: 60ch; }
+  .cap { margin: 18px 0 6px; max-width: 70ch; }
   table { border-collapse: collapse; width: 100%; font-size: 14px; font-variant-numeric: tabular-nums; }
   th, td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--line); }
   th:first-child, td:first-child { text-align: left; }
@@ -111,9 +113,11 @@
     <span>○ hollow: under 5 attempts, mostly prior</span>
   </div>
   <svg id="radar" viewBox="-245 -170 490 340" width="100%" style="max-width:460px;display:block;margin:auto"
-       role="img" aria-label="radar chart of accuracy and speed per axis"></svg>
+       role="img" aria-label="radar chart of accuracy and speed per skill"></svg>
   <p id="next"></p>
-  <div id="tablewrap"><table id="table"><thead><tr><th>axis</th><th>n</th><th>raw</th><th>accuracy</th><th>speed</th><th>med s</th></tr></thead><tbody></tbody></table></div>
+  <p id="activity" class="sub act" hidden></p>
+  <p class="sub cap">By <b>topic</b> — what the questions are <i>about</i>. The radar above scores what they <i>exercise</i>, which is what tells you where to practise: one markov question is evidence about setup, conditioning and execution at once.</p>
+  <div id="tablewrap"><table id="table"><thead><tr><th>topic</th><th>n</th><th>raw</th><th>accuracy</th><th>speed</th><th>med s</th></tr></thead><tbody></tbody></table></div>
   <p class="small">Accuracy is shrunk toward your overall rate (a prior worth 8 attempts) and measured against
     your own accuracy at each difficulty, so an axis with few attempts sits near the middle rather than at an
     extreme. Speed is over correct answers only, relative to your usual time at that difficulty: 0.5 is your
@@ -125,7 +129,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, MIN_FOR_VERDICT, checkAnswer, score, workOnNext } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -136,7 +140,7 @@ const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; }
 // never rendered and nothing said the attempt was lost. Return whether it stuck instead.
 const save = (h) => { try { localStorage.setItem(KEY, JSON.stringify(h)); return true; } catch { return false; } };
 const NOT_SAVED = "Not saved: this browser refused to store your history (storage blocked, private mode or full), so this attempt will not count toward the radar.";
-let bank = [], q = null, t0 = 0, tick = null, done = false;
+let bank = [], skillTable = {}, q = null, t0 = 0, tick = null, done = false;
 
 for (const a of AXES) $("axis").add(new Option(a, a));
 
@@ -260,28 +264,38 @@ function el(tag, attrs, parent) {
   parent.appendChild(e); return e;
 }
 
+const EVEN = Object.fromEntries(SKILLS.map((k) => [k, 1 / SKILLS.length]));
+// Every stored attempt carries qid and difficulty, and a qid starts with its generator,
+// so the whole history re-scores from the table with nothing rewritten. A generator that
+// no longer exists falls back to an even split rather than being dropped: losing the
+// attempt would quietly shrink the history.
+function weigh(a) {
+  const vec = skillTable[`${String(a.qid || "").split(":")[0]}|${a.difficulty}`] || EVEN;
+  return route(vec, !!a.correct, a.error_kind || null);
+}
+
 function render() {
-  const hist = load(), s = score(hist), svg = $("radar");
+  const hist = load(), s = skillScore(hist, weigh), topics = score(hist), svg = $("radar");
   svg.textContent = "";
-  const R = 120, ang = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / 6;
+  const R = 120, AX = SKILLS, ang = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / AX.length;
   const pt = (i, r) => [r * R * Math.cos(ang(i)), r * R * Math.sin(ang(i))];
   for (const ring of [0.25, 0.5, 0.75, 1]) {
-    el("polygon", { points: AXES.map((_, i) => pt(i, ring).join(",")).join(" "), fill: "none",
+    el("polygon", { points: AX.map((_, i) => pt(i, ring).join(",")).join(" "), fill: "none",
                     stroke: "var(--line)", "stroke-width": ring === 0.5 ? 1.5 : 1 }, svg);
   }
   el("text", { x: 4, y: -0.5 * R - 3 }, svg).textContent = "0.5";
-  AXES.forEach((a, i) => {
+  AX.forEach((a, i) => {
     const thin = s[a].n < MIN_FOR_VERDICT;
     el("line", { x1: 0, y1: 0, x2: pt(i, 1)[0], y2: pt(i, 1)[1], stroke: "var(--line)" }, svg);
     const [x, y] = pt(i, 1.2);
     const t = el("text", { x, y, "text-anchor": Math.abs(x) < 5 ? "middle" : x > 0 ? "start" : "end",
                            "dominant-baseline": "middle", class: "lbl", opacity: thin ? 0.5 : 1 }, svg);
     t.textContent = a;
-    el("tspan", { x, dy: 15, class: "" }, t).textContent = `n=${s[a].n}${thin ? " · thin" : ""}`;
+    el("tspan", { x, dy: 15, class: "" }, t).textContent = `n=${s[a].n.toFixed(1)}${thin ? " · thin" : ""}`;
   });
   const series = [["accuracy", "var(--acc)", ""], ["speed", "var(--spd)", "6 4"]];
   for (const [key, color, dash] of series) {
-    const vals = AXES.map((a) => s[a][key]);
+    const vals = AX.map((a) => s[a][key]);
     if (vals.every((v) => v === null || Number.isNaN(v))) continue;
     // No data on an axis means the score IS the prior: draw it there (hollow), not at 0,
     // which would read as "very slow" or "always wrong".
@@ -290,21 +304,29 @@ function render() {
     el("polygon", { points: pts.map((p) => p.join(",")).join(" "), fill: color, "fill-opacity": 0.12,
                     stroke: color, "stroke-width": 2, "stroke-dasharray": dash, "stroke-linejoin": "round" }, svg);
     vals.forEach((v, i) => {
-      const thin = s[AXES[i]].n < MIN_FOR_VERDICT || v === null;
+      const thin = s[AX[i]].n < MIN_FOR_VERDICT || v === null;
       const c = el("circle", { cx: pts[i][0], cy: pts[i][1], r: 4.5, fill: thin ? "var(--bg)" : color,
                                stroke: color, "stroke-width": 2 }, svg);
-      el("title", {}, c).textContent = v === null ? `${AXES[i]} ${key}: no correct answers yet` : `${AXES[i]} ${key}: ${key === "accuracy" ? Math.round(v * 100) + "%" : v.toFixed(2)} (n=${s[AXES[i]].n})`;
+      el("title", {}, c).textContent = v === null ? `${AX[i]} ${key}: no correct answers yet` : `${AX[i]} ${key}: ${key === "accuracy" ? Math.round(v * 100) + "%" : v.toFixed(2)} (n=${s[AX[i]].n.toFixed(1)})`;
     });
   }
   const tb = $("table").tBodies[0]; tb.textContent = "";
   for (const a of AXES) {
-    const x = s[a], tr = tb.insertRow();
+    const x = topics[a], tr = tb.insertRow();
     const cells = [a, x.n, x.raw_accuracy === null ? "" : Math.round(x.raw_accuracy * 100) + "%",
                    x.n ? Math.round(x.accuracy * 100) + "%" : "", x.speed === null ? "" : x.speed.toFixed(2),
                    x.median_seconds === null ? "" : Math.round(x.median_seconds)];
     cells.forEach((c) => { const td = tr.insertCell(); td.textContent = c; if (x.n < MIN_FOR_VERDICT) td.className = "thin"; });
   }
-  $("next").textContent = hist.length ? `Work on next: ${workOnNext(s).join(" — ")}` : "Answer a few questions to see your radar.";
+  if (hist.length) {
+    const [skill, why, activity] = skillWorkOnNext(s);
+    $("next").textContent = `Work on next: ${skill} — ${why}`;
+    $("activity").textContent = activity;
+    $("activity").hidden = false;
+  } else {
+    $("next").textContent = "Answer a few questions to see your radar.";
+    $("activity").hidden = true;
+  }
   $("count").textContent = `${hist.length} attempts stored in this browser`;
 }
 
@@ -321,7 +343,7 @@ $("import").onchange = async (e) => {
   if (!kept) $("count").textContent = NOT_SAVED;
 };
 
-fetch("bank.json").then((r) => r.json()).then((b) => { bank = b.questions; ask(); render(); });
+fetch("bank.json").then((r) => r.json()).then((b) => { bank = b.questions; skillTable = b.skill_table || {}; ask(); render(); });
 </script>
 </body>
 </html>
