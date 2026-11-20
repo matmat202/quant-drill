@@ -448,20 +448,22 @@ function renderTests(hist) {
     // The misses, recovered from the bank by qid: the end-of-test list is gone on reload,
     // and re-reading what you got wrong is the reason to keep a test at all. A qid the
     // current bank no longer holds (a regenerated generator) says so rather than vanishing.
-    if (x.missed.length) {
-      const d = document.createElement("details"), sm = document.createElement("summary");
-      sm.textContent = `review the ${x.missed.length} miss${x.missed.length > 1 ? "es" : ""}`;
-      d.append(sm);
-      for (const id of x.missed) {
-        const m = byQid().get(id), c = document.createElement("code");
-        c.textContent = m ? `${m.text}\n\nanswer ${m.answer.length <= 24 ? m.answer + " = " : ""}${m.value.toFixed(4)}\n${m.working}`
-          : `${id}: this question is no longer in the bank.`;
-        d.append(c);
-      }
-      li.append(d);
-    }
+    if (x.missed.length) li.append(missReview(x.missed));
     ol.append(li);
   }
+}
+
+function missReview(missed) {
+  const d = document.createElement("details"), sm = document.createElement("summary");
+  sm.textContent = `review the ${missed.length} miss${missed.length > 1 ? "es" : ""}`;
+  d.append(sm);
+  for (const id of missed) {
+    const m = byQid().get(id), c = document.createElement("code");
+    c.textContent = m ? `${m.text}\n\nanswer ${m.answer.length <= 24 ? m.answer + " = " : ""}${m.value.toFixed(4)}\n${m.working}`
+      : `${id}: this question is no longer in the bank.`;
+    d.append(c);
+  }
+  return d;
 }
 
 function renderRetries(hist) {
@@ -473,6 +475,7 @@ function renderRetries(hist) {
     const when = new Date(x.start * 1000).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
     li.textContent = `${when} · ${x.right} of ${x.n} right`
       + (x.like ? ` · ${x.like} new one${x.like > 1 ? "s" : ""} like a miss (${x.likeMissed} missed)` : "");
+    if (x.missed.length) li.append(missReview(x.missed));
     ol.append(li);
   }
 }

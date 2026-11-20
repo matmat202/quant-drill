@@ -369,10 +369,12 @@ export function runSummary(hist, since) {
 // carries retry=<the second #retry was clicked>, as a test attempt carries test=<id>.
 // Attempts stored before that stamp existed carry none, so runs older than it do not
 // appear -- they cannot be told apart from drilling, and guessing would invent runs.
+// `missed` lists the run's wrong answers' qids in the order taken, as testHistory does.
 export function retryHistory(hist) {
   const by = new Map();
-  for (const a of hist) if (a.retry !== undefined) (by.get(a.retry) || by.set(a.retry, []).get(a.retry)).push(a);
-  return [...by].map(([start, xs]) => { const { text, ...r } = runSummary(xs, start); return { start, ...r }; })
+  for (const a of hist) if (a.retry !== undefined && a.test === undefined) (by.get(a.retry) || by.set(a.retry, []).get(a.retry)).push(a);
+  return [...by].map(([start, xs]) => { const { text, ...r } = runSummary(xs, start);
+    return { start, ...r, missed: xs.filter((a) => !a.correct).sort((a, b) => a.t - b.t).map((a) => a.qid) }; })
     .sort((a, b) => b.start - a.start);
 }
 
