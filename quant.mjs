@@ -295,7 +295,7 @@ export function testSummary(rows) {
 // those fields existed fall back to TEST_N and to last-answer minus start. The weakest
 // axis is the lowest right/answered among the axes that test reached -- unreached
 // questions have no axis on record -- ties to the most missed, then AXES order; null when
-// nothing answered was wrong.
+// nothing answered was wrong. `missed` lists the wrong answers' qids in the order taken.
 export function testHistory(hist) {
   const by = new Map();
   for (const a of hist) if (a.test !== undefined) (by.get(a.test) || by.set(a.test, []).get(a.test)).push(a);
@@ -314,7 +314,8 @@ export function testHistory(hist) {
       if (!w || b.right / b.n < w.right / w.n || (b.right / b.n === w.right / w.n && b.n - b.right > w.n - w.right)) weakest = axis;
     }
     out.push({ id, n, answered: xs.length, right: xs.filter((a) => a.correct).length,
-               seconds: Math.min(TEST_SECONDS, Math.max(0, seconds)), weakest });
+               seconds: Math.min(TEST_SECONDS, Math.max(0, seconds)), weakest,
+               missed: xs.filter((a) => !a.correct).sort((a, b) => a.t - b.t).map((a) => a.qid) });
   }
   return out.sort((a, b) => b.id - a.id);
 }

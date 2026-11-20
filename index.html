@@ -380,6 +380,9 @@ function weigh(a) {
   return route(vec, !!a.correct, a.error_kind || null);
 }
 
+let qidIndex = null;
+const byQid = () => qidIndex || (qidIndex = new Map(bank.map((x) => [x.qid, x])));
+
 function renderTests(hist) {
   const T = testHistory(hist), ol = $("testlist");
   ol.textContent = "";
@@ -390,6 +393,21 @@ function renderTests(hist) {
     li.textContent = `${when} · ${x.right} of ${x.n} · ${clock(x.seconds)}`
       + (x.answered < x.n ? ` · ${x.n - x.answered} not reached` : "")
       + (x.weakest ? ` · weakest: ${x.weakest}` : " · nothing missed");
+    // The misses, recovered from the bank by qid: the end-of-test list is gone on reload,
+    // and re-reading what you got wrong is the reason to keep a test at all. A qid the
+    // current bank no longer holds (a regenerated generator) says so rather than vanishing.
+    if (x.missed.length) {
+      const d = document.createElement("details"), sm = document.createElement("summary");
+      sm.textContent = `review the ${x.missed.length} miss${x.missed.length > 1 ? "es" : ""}`;
+      d.append(sm);
+      for (const id of x.missed) {
+        const m = byQid().get(id), c = document.createElement("code");
+        c.textContent = m ? `${m.text}\n\nanswer ${m.answer.length <= 24 ? m.answer + " = " : ""}${m.value.toFixed(4)}\n${m.working}`
+          : `${id}: this question is no longer in the bank.`;
+        d.append(c);
+      }
+      li.append(d);
+    }
     ol.append(li);
   }
 }
