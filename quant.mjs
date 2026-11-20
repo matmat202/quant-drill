@@ -244,3 +244,46 @@ export function autoSkill(scores, c = AUTO_C) {
   if (thin.length) return thin.reduce((a, b) => (b.n < a.n ? b : a)).skill;
   return all.reduce((a, b) => (b.accuracy - c / Math.sqrt(b.n) < a.accuracy - c / Math.sqrt(a.n) ? b : a)).skill;
 }
+
+// --- mock test ------------------------------------------------------------------------
+// An assessment, not a drill: TEST_N questions against one clock, no verdict until the end.
+// Every axis appears at least once (all six, then the rest from a second shuffle, so no axis
+// three times), the tiers lean to interview difficulty, and no generator is dealt twice --
+// two "six dice, max is k" questions in ten would test one idea twice.
+export const TEST_N = 10, TEST_SECONDS = 20 * 60;
+const TEST_TIERS = [2, 2, 3];
+function shuffled(xs, rnd) {
+  const a = xs.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+export function testDraw(bank, rnd = Math.random, n = TEST_N) {
+  const axes = [];
+  while (axes.length < n) axes.push(...shuffled(AXES, rnd));
+  const out = [], gens = new Set();
+  for (const axis of axes.slice(0, n)) {
+    const tier = TEST_TIERS[Math.floor(rnd() * TEST_TIERS.length)];
+    // Prefer the drawn tier and a fresh generator; relax the tier, then the generator,
+    // rather than deal fewer than n.
+    const fresh = (x) => x.axis === axis && !gens.has(x.gen) && !out.includes(x);
+    const pools = [bank.filter((x) => fresh(x) && x.d === tier), bank.filter(fresh), bank.filter((x) => x.axis === axis && !out.includes(x))];
+    const pool = pools.find((p) => p.length);
+    if (!pool) continue;
+    const q = pool[Math.floor(rnd() * pool.length)];
+    out.push(q); gens.add(q.gen);
+  }
+  return out;
+}
+
+// rows: one per dealt question, { q, correct, seconds } once answered, { q } if the clock
+// ran out first. Unreached questions count against the score, as they do on the real thing.
+export function testSummary(rows) {
+  const answered = rows.filter((r) => r.correct !== undefined);
+  const byAxis = {};
+  for (const r of rows) {
+    const b = (byAxis[r.q.axis] ||= { right: 0, n: 0 });
+    b.n++; if (r.correct) b.right++;
+  }
+  return { n: rows.length, answered: answered.length, right: answered.filter((r) => r.correct).length,
+           seconds: Math.round(answered.reduce((t, r) => t + r.seconds, 0) * 10) / 10, byAxis };
+}

@@ -29,6 +29,8 @@
   h1 { font-size: 22px; margin: 0 0 4px; }
   .sub { color: var(--ink-2); margin: 0 0 18px; font-size: 14px; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  /* .row's display:flex outranks the hidden attribute, so a hidden #form still showed. */
+  [hidden] { display: none !important; }
   /* A file input carries a wide intrinsic minimum (its button plus a filename),
      and a flex item defaults to min-width:auto, so the Import label held the row
      at 412px on a 360px phone under 200% text (2026-11-17). */
@@ -49,6 +51,10 @@
   #mcpad button.picked-no { border-color: var(--bad); color: var(--bad); font-weight: 600; }
   #mcpad button.was-right { border-color: var(--good); }
   #timer { font-variant-numeric: tabular-nums; }
+  #feedback ol { padding-left: 1.6em; margin: 8px 0; }
+  #feedback li { margin: 3px 0; }
+  #feedback details { margin: 2px 0 6px; }
+  #feedback summary { cursor: pointer; color: var(--ink-2); }
   #feedback { margin-top: 12px; min-height: 1.5em; }
   #feedback .ok { color: var(--good); font-weight: 600; }
   #feedback .no { color: var(--bad); font-weight: 600; }
@@ -88,6 +94,7 @@
       <option value="">mixed</option><option value="1">1 warm-up</option>
       <option value="2">2 interview</option><option value="3">3 hard</option></select></label>
     <button id="new">New question</button>
+    <button id="mock">Mock test: 10 questions, 20 min</button>
   </div>
 
   <div class="card" id="qcard">
@@ -131,7 +138,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -143,6 +150,9 @@ const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; }
 const save = (h) => { try { localStorage.setItem(KEY, JSON.stringify(h)); return true; } catch { return false; } };
 const NOT_SAVED = "Not saved: this browser refused to store your history (storage blocked, private mode or full), so this attempt will not count toward the radar.";
 let bank = [], skillTable = {}, q = null, t0 = 0, tick = null, done = false;
+// A mock test in progress: the dealt questions, how far in, a row per answer, and the
+// clock (performance.now() at the start; the limit is TEST_SECONDS from there).
+let test = null;
 
 for (const a of AXES) $("axis").add(new Option(a, a));
 for (const k of SKILLS) $("skill").add(new Option(k, k));
@@ -189,16 +199,71 @@ function pick() {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+const clock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
+
 function ask() {
-  q = pick(); done = false;
-  const k = targetSkill();
-  $("qmeta").textContent = `${k ? `drilling ${$("skill").value === "auto" ? "(auto) " : ""}${k} · ` : ""}${q.axis} · difficulty ${q.d}`;
+  if (test && test.i >= test.qs.length) return endTest();
+  q = test ? test.qs[test.i] : pick(); done = false;
+  const k = test ? "" : targetSkill();
+  $("qmeta").textContent = test ? `mock test · question ${test.i + 1} of ${test.qs.length} · ${q.axis} · difficulty ${q.d}`
+    : `${k ? `drilling ${$("skill").value === "auto" ? "(auto) " : ""}${k} · ` : ""}${q.axis} · difficulty ${q.d}`;
   $("qtext").textContent = q.text;
   $("answer").value = ""; $("feedback").textContent = "";
-  renderChoices();
+  renderChoices(); $("giveup").hidden = false;
   if (numericMode()) $("answer").focus();
   t0 = performance.now(); clearInterval(tick);
-  tick = setInterval(() => { $("timer").textContent = `${Math.floor((performance.now() - t0) / 1000)}s`; }, 250);
+  tick = setInterval(() => {
+    if (!test) { $("timer").textContent = `${Math.floor((performance.now() - t0) / 1000)}s`; return; }
+    const left = TEST_SECONDS - (performance.now() - test.start) / 1000;
+    if (left <= 0) return endTest();
+    $("timer").textContent = `${clock(left)} left`;
+  }, 250);
+}
+
+// The test deals its questions up front and shows no verdict until the end, as a firm's
+// online assessment does: a right/wrong after each one changes how the rest are taken.
+// Every answer is still stored, so the test feeds the radar like any other attempt.
+function startTest() {
+  test = { qs: testDraw(bank), i: 0, rows: [], start: performance.now(), id: Date.now() / 1000 };
+  for (const id of ["skill", "axis", "diff", "new"]) $(id).disabled = true;
+  $("mock").textContent = "End test now";
+  ask();
+  $("qcard").scrollIntoView();
+}
+
+function endTest() {
+  clearInterval(tick);
+  const T = test; test = null; done = true;
+  const used = Math.min(TEST_SECONDS, (performance.now() - T.start) / 1000);
+  const rows = T.qs.map((x, i) => T.rows[i] || { q: x });
+  const S = testSummary(rows);
+  $("skill").disabled = $("new").disabled = false; target();
+  $("mock").textContent = "Mock test: 10 questions, 20 min";
+  $("qmeta").textContent = "mock test · finished"; $("timer").textContent = "";
+  $("qtext").textContent = "Test over. Results below; New question goes back to drilling.";
+  $("mcpad").hidden = $("form").hidden = $("giveup").hidden = true;
+  const fb = $("feedback"); fb.textContent = "";
+  const head = document.createElement("p"); head.id = "testscore";
+  head.innerHTML = `<b>${S.right} of ${S.n} right</b> in ${clock(used)}`
+    + (S.answered < S.n ? ` · the clock ran out with ${S.n - S.answered} unanswered` : "");
+  const ol = document.createElement("ol");
+  rows.forEach((r) => {
+    const li = document.createElement("li");
+    const mark = document.createElement("span");
+    mark.className = r.correct ? "ok" : "no";
+    mark.textContent = r.correct ? "right" : r.correct === false ? "wrong" : "not reached";
+    li.append(mark, ` · ${r.q.axis} · difficulty ${r.q.d}${r.seconds !== undefined ? ` · ${Math.round(r.seconds)}s` : ""}`);
+    if (!r.correct) {
+      const d = document.createElement("details"), sm = document.createElement("summary"), c = document.createElement("code");
+      sm.textContent = "the question and its working";
+      c.textContent = `${r.q.text}\n\nanswer ${r.q.answer.length <= 24 ? r.q.answer + " = " : ""}${r.q.value.toFixed(4)}\n${r.q.working}`;
+      d.append(sm, c); li.append(d);
+    }
+    ol.append(li);
+  });
+  fb.append(head, ol);
+  if (T.unsaved) { const w = document.createElement("p"); w.className = "no"; w.textContent = NOT_SAVED; fb.append(w); }
+  render();
 }
 
 // Multiple choice is the default (user, 2026-11-17). Each distractor is the answer a
@@ -223,6 +288,7 @@ function renderChoices() {
     b.addEventListener("click", () => {
       if (done) return;
       const right = i === q.mc.correct_index;
+      if (test) return finish(String(v), right, right ? null : q.mc.errors[i]);
       [...pad.children].forEach((c, k) => {
         if (k === q.mc.correct_index) c.classList.add("was-right");
         c.disabled = true;
@@ -240,8 +306,13 @@ function finish(given, correct, errorKind) {
   const h = load();
   h.push({ t: Date.now() / 1000, axis: q.axis, difficulty: q.d, qid: q.qid, answer: q.answer,
            given, correct, seconds, mode: numericMode() ? "numeric" : "mc",
-           error_kind: errorKind || null });
+           error_kind: errorKind || null, ...(test ? { test: test.id } : {}) });
   const kept = save(h);
+  if (test) {
+    test.rows[test.i++] = { q, correct, seconds };
+    if (!kept) test.unsaved = true;
+    return ask();
+  }
   const fb = $("feedback"); fb.textContent = "";
   const verdict = document.createElement("span");
   verdict.className = correct ? "ok" : "no";
@@ -282,6 +353,7 @@ $("form").addEventListener("submit", (e) => {
 });
 $("giveup").onclick = () => { if (!done) finish(null, false); };
 $("new").onclick = ask;
+$("mock").onclick = () => (test ? endTest() : startTest());
 $("axis").onchange = $("diff").onchange = $("skill").onchange = ask;
 $("drillnext").onclick = () => { $("skill").value = $("drillnext").dataset.skill; ask(); $("qcard").scrollIntoView(); };
 
