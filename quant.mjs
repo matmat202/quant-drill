@@ -349,3 +349,27 @@ export function dueIn(at, now = Date.now() / 1000) {
   const s = Math.max(0, at - now);
   return s < 3600 ? `${Math.max(1, Math.ceil(s / 60))}m` : `${Math.round(s / 3600)}h`;
 }
+
+// --- a new one like this -------------------------------------------------------------
+// A miss usually means a skill gap, and re-asking the identical text measures memory of
+// that text. After a retry answer the page offers a FRESH question of the same kind: the
+// same axis and difficulty, loading hardest on the skill the answered question loads
+// hardest (`topSkill`), never a qid already in the history. Ties at the top load are drawn
+// with `rnd`. Null when the cell holds nothing unseen.
+export function topSkill(q, table) {
+  const row = table[`${q.gen}|${q.d}`];
+  if (!row) return null;
+  let best = null;
+  for (const k of SKILLS) if ((row[k] || 0) > (best === null ? 0 : row[best] || 0)) best = k;
+  return best;
+}
+export function likeThis(q, bank, table, seen, rnd = Math.random) {
+  const skill = topSkill(q, table);
+  let top = [], topLoad = -Infinity;
+  for (const x of bank) {
+    if (x.axis !== q.axis || x.d !== q.d || x.qid === q.qid || seen.has(x.qid)) continue;
+    const load = skill ? (table[`${x.gen}|${x.d}`] || {})[skill] || 0 : 0;
+    if (load > topLoad) { top = [x]; topLoad = load; } else if (load === topLoad) top.push(x);
+  }
+  return top.length ? top[Math.floor(rnd() * top.length)] : null;
+}

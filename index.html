@@ -57,6 +57,7 @@
   #feedback details { margin: 2px 0 6px; }
   #feedback summary { cursor: pointer; color: var(--ink-2); }
   #feedback { margin-top: 12px; min-height: 1.5em; }
+  #feedback #likethis { display: block; margin-top: 10px; }
   #feedback .ok { color: var(--good); font-weight: 600; }
   #feedback .no { color: var(--bad); font-weight: 600; }
   #feedback code { display: block; margin-top: 6px; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
@@ -142,7 +143,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, retryQueue, dueIn, TEST_N, TEST_SECONDS } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, retryQueue, dueIn, likeThis, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -161,6 +162,9 @@ let test = null;
 // used. `lastRetry` is the qid just served, skipped while anything else is queued -- a
 // wrong answer keeps it at the head, and the same question straight back is a memory test.
 let retrying = false, lastRetry = null;
+// A fresh question like the one just answered in a retry run (likeThis), served next by
+// ask() in place of the queue. The run stays in retry mode, so Enter after it carries on.
+let likeQ = null;
 // The queue as the page can serve it: a qid the current bank no longer holds is dropped.
 const queued = () => retryQueue(load()).filter((r) => byQid().has(r.qid));
 const misses = () => queued().filter((r) => r.due).map((r) => r.qid);
@@ -216,13 +220,16 @@ const clock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).p
 function ask() {
   if (test && test.i >= test.qs.length) return endTest();
   renderRetry();
-  const queue = retrying ? misses() : [];
-  if (retrying && !queue.length) return endRetry();
-  if (retrying) { lastRetry = queue.find((id) => id !== lastRetry) || queue[0]; q = byQid().get(lastRetry); }
+  const like = likeQ; likeQ = null;
+  const queue = retrying && !like ? misses() : [];
+  if (retrying && !like && !queue.length) return endRetry();
+  if (like) q = like;
+  else if (retrying) { lastRetry = queue.find((id) => id !== lastRetry) || queue[0]; q = byQid().get(lastRetry); }
   else q = test ? test.qs[test.i] : pick();
   done = false;
   const k = test || retrying ? "" : targetSkill();
-  $("qmeta").textContent = retrying ? `retrying your misses · ${queue.length} left · ${q.axis} · difficulty ${q.d}`
+  $("qmeta").textContent = like ? `a new one like it · ${q.axis} · difficulty ${q.d}`
+    : retrying ? `retrying your misses · ${queue.length} left · ${q.axis} · difficulty ${q.d}`
     : test ? `mock test · question ${test.i + 1} of ${test.qs.length} · ${q.axis} · difficulty ${q.d}`
     : `${k ? `drilling ${$("skill").value === "auto" ? "(auto) " : ""}${k} · ` : ""}${q.axis} · difficulty ${q.d}`;
   $("qtext").textContent = q.text;
@@ -370,6 +377,14 @@ function finish(given, correct, errorKind) {
   code.textContent = (errorKind && MISTAKE[errorKind] ? MISTAKE[errorKind] + "\n" : "")
     + `answer ${exact}${q.value.toFixed(4)}\n${q.working}`;
   fb.append(verdict, ` Press Enter for the next one.`, code);
+  const like = retrying ? likeThis(q, bank, skillTable, new Set(h.map((a) => a.qid))) : null;
+  if (like) {
+    const b = document.createElement("button");
+    b.type = "button"; b.id = "likethis"; b.textContent = "Try a new one like this";
+    b.title = "Same topic and difficulty, a question you have not seen, loading on the same skill.";
+    b.onclick = () => { likeQ = like; ask(); $("qcard").scrollIntoView(); };
+    fb.append(b);
+  }
   if (!kept) {
     const warn = document.createElement("p");
     warn.className = "no"; warn.id = "notsaved"; warn.textContent = NOT_SAVED;
