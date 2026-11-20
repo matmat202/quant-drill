@@ -231,3 +231,16 @@ export function cellForSkill(skill, questions, table) {
   const [axis, d] = best.split("|");
   return { axis, d: +d, load: bestLoad };
 }
+
+// Which skill Skill=auto drills next. NOT simply the advice: drilling only the lowest
+// accuracy never revisits a vertex once it looks fine, so a weak skill that got lucky in
+// its first five attempts stays unvisited for good (test/autosim.mjs: 4 of 30 simulated
+// users were stuck on the wrong skill for 300+ questions). Ranking by a lower confidence
+// bound keeps thin vertices in rotation until their estimate has earned trust.
+export const AUTO_C = 0.5;
+export function autoSkill(scores, c = AUTO_C) {
+  const all = SKILLS.map((s) => scores[s]);
+  const thin = all.filter((s) => s.n < MIN_FOR_VERDICT);
+  if (thin.length) return thin.reduce((a, b) => (b.n < a.n ? b : a)).skill;
+  return all.reduce((a, b) => (b.accuracy - c / Math.sqrt(b.n) < a.accuracy - c / Math.sqrt(a.n) ? b : a)).skill;
+}

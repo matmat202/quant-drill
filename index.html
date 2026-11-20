@@ -82,7 +82,7 @@
   <p class="sub">Generated probability questions with exactly computed answers. Your history stays in this browser.</p>
 
   <div class="row">
-    <label>Skill <select id="skill"><option value="">any</option><option value="auto">auto: what the radar says</option></select></label>
+    <label>Skill <select id="skill"><option value="">any</option><option value="auto" selected>auto: what the radar says</option></select></label>
     <label>Axis <select id="axis"><option value="">mixed</option></select></label>
     <label>Difficulty <select id="diff">
       <option value="">mixed</option><option value="1">1 warm-up</option>
@@ -131,7 +131,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -159,18 +159,21 @@ function saveMode() {
 // Targeting a skill overrides axis and difficulty: it serves the one cell that loads on
 // that skill hardest (cellForSkill). The other two selectors are disabled rather than
 // silently ignored, so the page never claims a filter it is not applying.
-// "auto" re-reads the advice before every question, so it moves on by itself once the
-// thin or weak vertex has caught up. With no history there is no advice: it draws mixed.
+// "auto" (the default) re-ranks the skills before every question with autoSkill, which
+// keeps thin vertices in rotation instead of fixating on the current lowest -- see
+// test/autosim.mjs for why. With no history there is nothing to rank: it draws mixed.
 function targetSkill() {
   const k = $("skill").value;
   if (k !== "auto") return k;
   const hist = load();
-  return hist.length ? skillWorkOnNext(skillScore(hist, weigh))[0] : "";
+  return hist.length ? autoSkill(skillScore(hist, weigh)) : "";
 }
 
 function target() {
   const k = targetSkill();
-  $("axis").disabled = $("diff").disabled = !!$("skill").value;
+  // Disabled only while a skill is actually targeted: auto on an empty history draws
+  // mixed and honours these, so greying them out then would misdescribe the page.
+  $("axis").disabled = $("diff").disabled = !!k;
   return k ? cellForSkill(k, bank, skillTable) : null;
 }
 
