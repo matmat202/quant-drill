@@ -131,6 +131,7 @@
   <svg id="radar" viewBox="-245 -170 490 340" width="100%" style="max-width:460px;display:block;margin:auto"
        role="img" aria-label="radar chart of accuracy and speed per skill"></svg>
   <p id="next"></p>
+  <p id="weekline" class="sub" hidden></p>
   <p id="activity" class="sub act" hidden></p>
   <p><button type="button" id="drillnext" hidden></button></p>
   <div id="pasttests" hidden><h3>Your mock tests</h3><p id="testtrend" class="sub" hidden></p><ul id="testlist" class="sub"></ul></div>
@@ -148,7 +149,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, radarThen, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, testTrend, runTrend, sparkPoints, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, radarThen, weekChange, weekLine, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, testTrend, runTrend, sparkPoints, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -617,7 +618,11 @@ function render() {
     $("drillnext").textContent = `Drill ${skill} now`;
     $("drillnext").dataset.skill = skill;
     $("drillnext").hidden = false;
+    const wl = weekLine(weekChange(s, then));
+    $("weekline").textContent = wl;
+    $("weekline").hidden = !wl;
   } else {
+    $("weekline").hidden = true;
     $("drillnext").hidden = true;
     $("next").textContent = "Answer a few questions to see your radar.";
     $("activity").hidden = true;

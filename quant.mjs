@@ -444,6 +444,41 @@ export function radarThen(hist, weigh, now = Date.now() / 1000, ago = THEN_AGO) 
   return SKILLS.some((k) => s[k].n >= MIN_FOR_VERDICT) ? s : null;
 }
 
+// The week-ago outline in words, since a dashed polygon is invisible to a screen reader.
+// Only skills with MIN_FOR_VERDICT attempts' worth in BOTH scores count: a thin side is
+// the prior, and "up 20 points" from a prior is the shrinkage letting go, not progress.
+// A move under one point (LEVEL) is neither gain nor drop. Null when there is no outline
+// or no skill qualifies; {gain, drop, level} otherwise, each move {skill, from, to}.
+export const LEVEL = 0.01;
+export function weekChange(now, then) {
+  if (!now || !then) return null;
+  const ok = SKILLS.filter((k) => now[k] && then[k] && now[k].n >= MIN_FOR_VERDICT && then[k].n >= MIN_FOR_VERDICT
+    && !Number.isNaN(now[k].accuracy) && !Number.isNaN(then[k].accuracy));
+  if (!ok.length) return null;
+  const moves = ok.map((k) => ({ skill: k, from: then[k].accuracy, to: now[k].accuracy }));
+  const d = (m) => m.to - m.from;
+  const up = moves.filter((m) => d(m) >= LEVEL), down = moves.filter((m) => d(m) <= -LEVEL);
+  return {
+    gain: up.length ? up.reduce((a, b) => (d(b) > d(a) ? b : a)) : null,
+    drop: down.length ? down.reduce((a, b) => (d(b) < d(a) ? b : a)) : null,
+    level: moves.length - up.length - down.length,
+  };
+}
+
+// 'This week: counting up 22 points (41% -> 63%); setup down 5.' The first clause carries
+// the percentages, the second only its size. Points are rounded from the two rounded
+// percentages, so the sentence agrees with the dot titles that show them.
+export function weekLine(w) {
+  if (!w) return "";
+  const pc = (v) => Math.round(v * 100);
+  const pts = (m) => Math.abs(pc(m.to) - pc(m.from));
+  const full = (m, dir) => `${m.skill} ${dir} ${pts(m)} point${pts(m) === 1 ? "" : "s"} (${pc(m.from)}% → ${pc(m.to)}%)`;
+  if (w.gain && w.drop) return `This week: ${full(w.gain, "up")}; ${w.drop.skill} down ${pts(w.drop)}.`;
+  if (w.gain) return `This week: ${full(w.gain, "up")}; nothing fell.`;
+  if (w.drop) return `This week: ${full(w.drop, "down")}; nothing rose.`;
+  return `This week: level — no skill moved a point.`;
+}
+
 // How long until `at`, for a person: whole hours, or minutes under one (never "0").
 export function dueIn(at, now = Date.now() / 1000) {
   const s = Math.max(0, at - now);
