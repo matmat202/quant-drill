@@ -126,6 +126,7 @@
     <span><span class="sw" style="border-color:var(--acc)"></span>accuracy</span>
     <span><span class="sw" style="border-color:var(--spd);border-top-style:dashed"></span>speed</span>
     <span>○ hollow: under 5 attempts, mostly prior</span>
+    <span id="thenkey" hidden><span class="sw" style="border-color:var(--ink-2);border-top-style:dotted"></span>accuracy a week ago</span>
   </div>
   <svg id="radar" viewBox="-245 -170 490 340" width="100%" style="max-width:460px;display:block;margin:auto"
        role="img" aria-label="radar chart of accuracy and speed per skill"></svg>
@@ -147,7 +148,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, testTrend, runTrend, sparkPoints, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, radarThen, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, testTrend, runTrend, sparkPoints, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -573,6 +574,15 @@ function render() {
     t.textContent = a;
     el("tspan", { x, dy: 15, class: "" }, t).textContent = `n=${s[a].n.toFixed(1)}${thin ? " · thin" : ""}`;
   });
+  // Accuracy a week ago, under today's shapes and unfilled, so the distance between the
+  // two outlines is the progress. Accuracy only: two ghosts would bury the speed line.
+  const then = radarThen(hist, weigh);
+  $("thenkey").hidden = !then;
+  if (then) {
+    const tp = AX.map((a, i) => pt(i, Number.isNaN(then[a].accuracy) ? 0.5 : then[a].accuracy));
+    el("polygon", { points: tp.map((p) => p.join(",")).join(" "), fill: "none", class: "then", stroke: "var(--ink-2)",
+                    "stroke-width": 1.5, "stroke-dasharray": "2 3", "stroke-linejoin": "round" }, svg);
+  }
   const series = [["accuracy", "var(--acc)", ""], ["speed", "var(--spd)", "6 4"]];
   for (const [key, color, dash] of series) {
     const vals = AX.map((a) => s[a][key]);
@@ -587,7 +597,8 @@ function render() {
       const thin = s[AX[i]].n < MIN_FOR_VERDICT || v === null;
       const c = el("circle", { cx: pts[i][0], cy: pts[i][1], r: 4.5, fill: thin ? "var(--bg)" : color,
                                stroke: color, "stroke-width": 2 }, svg);
-      el("title", {}, c).textContent = v === null ? `${AX[i]} ${key}: no correct answers yet` : `${AX[i]} ${key}: ${key === "accuracy" ? Math.round(v * 100) + "%" : v.toFixed(2)} (n=${s[AX[i]].n.toFixed(1)})`;
+      el("title", {}, c).textContent = v === null ? `${AX[i]} ${key}: no correct answers yet` : `${AX[i]} ${key}: ${key === "accuracy" ? Math.round(v * 100) + "%" : v.toFixed(2)} (n=${s[AX[i]].n.toFixed(1)})`
+        + (then && key === "accuracy" && !Number.isNaN(then[AX[i]].accuracy) ? `, a week ago ${Math.round(then[AX[i]].accuracy * 100)}%` : "");
     });
   }
   const tb = $("table").tBodies[0]; tb.textContent = "";

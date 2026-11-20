@@ -430,6 +430,20 @@ export function runTrend(rows, back = TREND_BACK, floor = RUN_FLOOR) {
   return { points, delta: points[points.length - 1].rate - base, base, over: prev.length };
 }
 
+// The radar as it stood `ago` seconds before `now`: skillScore over only the attempts
+// stamped at or before that cut, for the faint outline under today's. Scored from scratch
+// on that slice -- its own overall rate and shrinkage -- so it is what the page WOULD have
+// drawn then, not today's model replayed over less data. Null when the outline would say
+// nothing: no attempt is newer than the cut (it would sit exactly on today's shape), or no
+// skill had MIN_FOR_VERDICT attempts' worth by then (it would be the prior, drawn as fact).
+export const THEN_AGO = 7 * 86400;
+export function radarThen(hist, weigh, now = Date.now() / 1000, ago = THEN_AGO) {
+  const old = hist.filter((a) => a.t <= now - ago);
+  if (old.length === hist.length) return null;
+  const s = skillScore(old, weigh);
+  return SKILLS.some((k) => s[k].n >= MIN_FOR_VERDICT) ? s : null;
+}
+
 // How long until `at`, for a person: whole hours, or minutes under one (never "0").
 export function dueIn(at, now = Date.now() / 1000) {
   const s = Math.max(0, at - now);
