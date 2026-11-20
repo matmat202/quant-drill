@@ -326,6 +326,7 @@ export function testHistory(hist) {
 // recall, not learning. Each row says whether it is `due`: no right since its last miss,
 // or the one right is RETRY_GAP old. A qid right once more recently is waiting a day,
 // and its row carries `at`, the second (in `t`'s seconds) it falls due.
+// A row whose question was served as "a new one like" another carries `like_of`.
 // Most recently missed first. `now` is seconds, like `t`. Qids the current bank no
 // longer holds are the page's to filter -- this sees no bank.
 export const RETRY_GAP = 86400;
@@ -334,12 +335,17 @@ export function retryQueue(hist, now = Date.now() / 1000) {
   for (const a of hist) if (a.qid) (by.get(a.qid) || by.set(a.qid, []).get(a.qid)).push(a);
   const out = [];
   for (const [qid, xs] of by) {
-    const miss = Math.max(...xs.filter((a) => !a.correct).map((a) => a.t));
+    const wrong = xs.filter((a) => !a.correct), miss = Math.max(...wrong.map((a) => a.t));
     if (miss === -Infinity) continue;
+    // A question served as "a new one like this" carries `like_of`, the qid it branched
+    // from; the row keeps it so the retry run can say where the question came from.
+    // Only the attempt it was served on carries it, so look across every attempt.
+    const like_of = xs.reduce((o, a) => o || a.like_of || null, null);
     const rights = xs.filter((a) => a.correct && a.t > miss).map((a) => a.t).sort((a, b) => a - b);
     if (rights.length >= 2 && rights[rights.length - 1] - rights[0] >= RETRY_GAP) continue;
     const due = !rights.length || now - rights[0] >= RETRY_GAP;
-    out.push(due ? { qid, miss, due } : { qid, miss, due, at: rights[0] + RETRY_GAP });
+    const row = due ? { qid, miss, due } : { qid, miss, due, at: rights[0] + RETRY_GAP };
+    out.push(like_of ? { ...row, like_of } : row);
   }
   return out.sort((a, b) => b.miss - a.miss).map(({ miss, ...r }) => r);
 }

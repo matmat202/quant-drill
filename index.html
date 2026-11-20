@@ -164,7 +164,9 @@ let test = null;
 let retrying = false, lastRetry = null;
 // A fresh question like the one just answered in a retry run (likeThis), served next by
 // ask() in place of the queue. The run stays in retry mode, so Enter after it carries on.
-let likeQ = null;
+// `likeOf` is the qid it branched from; ask() hands it to `fromQid`, which finish() stores
+// as the attempt's like_of, so a miss on the new one stays linked to the miss before it.
+let likeQ = null, likeOf = null, fromQid = null;
 // The queue as the page can serve it: a qid the current bank no longer holds is dropped.
 const queued = () => retryQueue(load()).filter((r) => byQid().has(r.qid));
 const misses = () => queued().filter((r) => r.due).map((r) => r.qid);
@@ -220,7 +222,7 @@ const clock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).p
 function ask() {
   if (test && test.i >= test.qs.length) return endTest();
   renderRetry();
-  const like = likeQ; likeQ = null;
+  const like = likeQ; fromQid = like ? likeOf : null; likeQ = likeOf = null;
   const queue = retrying && !like ? misses() : [];
   if (retrying && !like && !queue.length) return endRetry();
   if (like) q = like;
@@ -228,10 +230,12 @@ function ask() {
   else q = test ? test.qs[test.i] : pick();
   done = false;
   const k = test || retrying ? "" : targetSkill();
+  const origin = retrying && !like ? byQid().get((queued().find((r) => r.qid === lastRetry) || {}).like_of) : null;
   $("qmeta").textContent = like ? `a new one like it · ${q.axis} · difficulty ${q.d}`
-    : retrying ? `retrying your misses · ${queue.length} left · ${q.axis} · difficulty ${q.d}`
+    : retrying ? `retrying your misses · ${queue.length} left · ${q.axis} · difficulty ${q.d}${origin ? " · a new one like an earlier miss" : ""}`
     : test ? `mock test · question ${test.i + 1} of ${test.qs.length} · ${q.axis} · difficulty ${q.d}`
     : `${k ? `drilling ${$("skill").value === "auto" ? "(auto) " : ""}${k} · ` : ""}${q.axis} · difficulty ${q.d}`;
+  $("qmeta").title = origin ? `It branched from: ${origin.text}` : "";
   $("qtext").textContent = q.text;
   $("answer").value = ""; $("feedback").textContent = "";
   renderChoices(); $("giveup").hidden = false;
@@ -348,7 +352,7 @@ function finish(given, correct, errorKind) {
   const h = load();
   h.push({ t: Date.now() / 1000, axis: q.axis, difficulty: q.d, qid: q.qid, answer: q.answer,
            given, correct, seconds, mode: numericMode() ? "numeric" : "mc",
-           error_kind: errorKind || null, ...(test ? { test: test.id, test_n: test.qs.length } : {}) });
+           error_kind: errorKind || null, ...(fromQid ? { like_of: fromQid } : {}), ...(test ? { test: test.id, test_n: test.qs.length } : {}) });
   const kept = save(h);
   if (test) {
     test.rows[test.i++] = { q, correct, seconds };
@@ -382,7 +386,8 @@ function finish(given, correct, errorKind) {
     const b = document.createElement("button");
     b.type = "button"; b.id = "likethis"; b.textContent = "Try a new one like this";
     b.title = "Same topic and difficulty, a question you have not seen, loading on the same skill.";
-    b.onclick = () => { likeQ = like; ask(); $("qcard").scrollIntoView(); };
+    const from = q.qid;
+    b.onclick = () => { likeQ = like; likeOf = from; ask(); $("qcard").scrollIntoView(); };
     fb.append(b);
   }
   if (!kept) {
