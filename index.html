@@ -60,6 +60,7 @@
   #feedback .no { color: var(--bad); font-weight: 600; }
   #feedback code { display: block; margin-top: 6px; color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; }
   h2 { font-size: 17px; margin: 28px 0 6px; }
+  h3 { font-size: 15px; margin: 18px 0 4px; }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 14px; color: var(--ink-2); }
   .sw { display: inline-block; width: 22px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 6px; }
   svg text { fill: var(--ink-2); font-size: 12px; }
@@ -125,6 +126,7 @@
   <p id="next"></p>
   <p id="activity" class="sub act" hidden></p>
   <p><button type="button" id="drillnext" hidden></button></p>
+  <div id="pasttests" hidden><h3>Your mock tests</h3><ul id="testlist" class="sub"></ul></div>
   <p class="sub cap">By <b>topic</b> — what the questions are <i>about</i>. The radar above scores what they <i>exercise</i>, which is what tells you where to practise: one markov question is evidence about setup, conditioning and execution at once.</p>
   <div id="tablewrap"><table id="table"><thead><tr><th>topic</th><th>n</th><th>raw</th><th>accuracy</th><th>speed</th><th>med s</th></tr></thead><tbody></tbody></table></div>
   <p class="small">Accuracy is shrunk toward your overall rate (a prior worth 8 attempts) and measured against
@@ -138,7 +140,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -237,6 +239,10 @@ function endTest() {
   const used = Math.min(TEST_SECONDS, (performance.now() - T.start) / 1000);
   const rows = T.qs.map((x, i) => T.rows[i] || { q: x });
   const S = testSummary(rows);
+  // Stamp the time used on the test's stored answers: the attempts alone cannot tell a
+  // test the clock ended from one finished early, and the history list shows which.
+  const h = load();
+  if (h.some((a) => a.test === T.id)) { for (const a of h) if (a.test === T.id) a.test_s = Math.round(used); save(h); }
   $("skill").disabled = $("new").disabled = false; target();
   $("mock").textContent = "Mock test: 10 questions, 20 min";
   $("qmeta").textContent = "mock test · finished"; $("timer").textContent = "";
@@ -306,7 +312,7 @@ function finish(given, correct, errorKind) {
   const h = load();
   h.push({ t: Date.now() / 1000, axis: q.axis, difficulty: q.d, qid: q.qid, answer: q.answer,
            given, correct, seconds, mode: numericMode() ? "numeric" : "mc",
-           error_kind: errorKind || null, ...(test ? { test: test.id } : {}) });
+           error_kind: errorKind || null, ...(test ? { test: test.id, test_n: test.qs.length } : {}) });
   const kept = save(h);
   if (test) {
     test.rows[test.i++] = { q, correct, seconds };
@@ -374,8 +380,23 @@ function weigh(a) {
   return route(vec, !!a.correct, a.error_kind || null);
 }
 
+function renderTests(hist) {
+  const T = testHistory(hist), ol = $("testlist");
+  ol.textContent = "";
+  $("pasttests").hidden = !T.length;
+  for (const x of T) {
+    const li = document.createElement("li");
+    const when = new Date(x.id * 1000).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    li.textContent = `${when} · ${x.right} of ${x.n} · ${clock(x.seconds)}`
+      + (x.answered < x.n ? ` · ${x.n - x.answered} not reached` : "")
+      + (x.weakest ? ` · weakest: ${x.weakest}` : " · nothing missed");
+    ol.append(li);
+  }
+}
+
 function render() {
   const hist = load(), s = skillScore(hist, weigh), topics = score(hist), svg = $("radar");
+  renderTests(hist);
   svg.textContent = "";
   const R = 120, AX = SKILLS, ang = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / AX.length;
   const pt = (i, r) => [r * R * Math.cos(ang(i)), r * R * Math.sin(ang(i))];

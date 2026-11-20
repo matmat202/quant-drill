@@ -287,3 +287,34 @@ export function testSummary(rows) {
   return { n: rows.length, answered: answered.length, right: answered.filter((r) => r.correct).length,
            seconds: Math.round(answered.reduce((t, r) => t + r.seconds, 0) * 10) / 10, byAxis };
 }
+
+// Past tests, newest first, rebuilt from stored attempts: each carries test=<start epoch>.
+// Only ANSWERED questions are stored, so the out-of count comes from test_n (the dealt
+// count, stamped on every attempt) and the time from test_s (stamped by endTest, so a test
+// the clock ended reads 20:00, not the sum of its few answers). Attempts written before
+// those fields existed fall back to TEST_N and to last-answer minus start. The weakest
+// axis is the lowest right/answered among the axes that test reached -- unreached
+// questions have no axis on record -- ties to the most missed, then AXES order; null when
+// nothing answered was wrong.
+export function testHistory(hist) {
+  const by = new Map();
+  for (const a of hist) if (a.test !== undefined) (by.get(a.test) || by.set(a.test, []).get(a.test)).push(a);
+  const out = [];
+  for (const [id, xs] of by) {
+    const n = Math.max(...xs.map((a) => a.test_n || 0)) || TEST_N;
+    const stamped = xs.map((a) => a.test_s).filter((v) => v !== undefined);
+    const seconds = stamped.length ? Math.max(...stamped) : Math.max(...xs.map((a) => a.t)) - id;
+    const ax = {};
+    for (const a of xs) { const b = (ax[a.axis] ||= { right: 0, n: 0 }); b.n++; if (a.correct) b.right++; }
+    let weakest = null;
+    for (const axis of AXES) {
+      const b = ax[axis];
+      if (!b || b.right === b.n) continue;
+      const w = weakest && ax[weakest];
+      if (!w || b.right / b.n < w.right / w.n || (b.right / b.n === w.right / w.n && b.n - b.right > w.n - w.right)) weakest = axis;
+    }
+    out.push({ id, n, answered: xs.length, right: xs.filter((a) => a.correct).length,
+               seconds: Math.min(TEST_SECONDS, Math.max(0, seconds)), weakest });
+  }
+  return out.sort((a, b) => b.id - a.id);
+}
