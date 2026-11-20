@@ -324,7 +324,8 @@ export function testHistory(hist) {
 // included, a give-up counts) that has not since been got right TWICE, the second right at
 // least RETRY_GAP after the first -- one right straight after reading the working is
 // recall, not learning. Each row says whether it is `due`: no right since its last miss,
-// or the one right is RETRY_GAP old. A qid right once more recently is waiting a day.
+// or the one right is RETRY_GAP old. A qid right once more recently is waiting a day,
+// and its row carries `at`, the second (in `t`'s seconds) it falls due.
 // Most recently missed first. `now` is seconds, like `t`. Qids the current bank no
 // longer holds are the page's to filter -- this sees no bank.
 export const RETRY_GAP = 86400;
@@ -337,7 +338,14 @@ export function retryQueue(hist, now = Date.now() / 1000) {
     if (miss === -Infinity) continue;
     const rights = xs.filter((a) => a.correct && a.t > miss).map((a) => a.t).sort((a, b) => a - b);
     if (rights.length >= 2 && rights[rights.length - 1] - rights[0] >= RETRY_GAP) continue;
-    out.push({ qid, miss, due: !rights.length || now - rights[0] >= RETRY_GAP });
+    const due = !rights.length || now - rights[0] >= RETRY_GAP;
+    out.push(due ? { qid, miss, due } : { qid, miss, due, at: rights[0] + RETRY_GAP });
   }
-  return out.sort((a, b) => b.miss - a.miss).map(({ qid, due }) => ({ qid, due }));
+  return out.sort((a, b) => b.miss - a.miss).map(({ miss, ...r }) => r);
+}
+
+// How long until `at`, for a person: whole hours, or minutes under one (never "0").
+export function dueIn(at, now = Date.now() / 1000) {
+  const s = Math.max(0, at - now);
+  return s < 3600 ? `${Math.max(1, Math.ceil(s / 60))}m` : `${Math.round(s / 3600)}h`;
 }

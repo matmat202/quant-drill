@@ -142,7 +142,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, retryQueue, TEST_N, TEST_SECONDS } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, retryQueue, dueIn, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -164,6 +164,7 @@ let retrying = false, lastRetry = null;
 // The queue as the page can serve it: a qid the current bank no longer holds is dropped.
 const queued = () => retryQueue(load()).filter((r) => byQid().has(r.qid));
 const misses = () => queued().filter((r) => r.due).map((r) => r.qid);
+const nextDue = () => dueIn(Math.min(...queued().filter((r) => !r.due).map((r) => r.at)));
 
 for (const a of AXES) $("axis").add(new Option(a, a));
 for (const k of SKILLS) $("skill").add(new Option(k, k));
@@ -214,6 +215,7 @@ const clock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).p
 
 function ask() {
   if (test && test.i >= test.qs.length) return endTest();
+  renderRetry();
   const queue = retrying ? misses() : [];
   if (retrying && !queue.length) return endRetry();
   if (retrying) { lastRetry = queue.find((id) => id !== lastRetry) || queue[0]; q = byQid().get(lastRetry); }
@@ -293,7 +295,7 @@ function endRetry() {
   $("qmeta").textContent = "retrying your misses · done"; $("timer").textContent = "";
   const wait = queued().length;
   $("qtext").textContent = wait
-    ? `Nothing is due. ${wait} question${wait > 1 ? "s" : ""} you got right in the last day come${wait > 1 ? "" : "s"} back after a day: a miss leaves the queue after two rights a day apart. New question goes back to drilling.`
+    ? `Nothing is due. ${wait} question${wait > 1 ? "s" : ""} you got right in the last day ${wait > 1 ? "are" : "is"} waiting; the next one is due in ${nextDue()}. A miss leaves the queue after two rights a day apart. New question goes back to drilling.`
     : "Every question you had missed, you have now got right twice, a day apart. New question goes back to drilling.";
   $("mcpad").hidden = $("form").hidden = $("giveup").hidden = true;
   $("feedback").textContent = "";
@@ -441,14 +443,20 @@ function renderTests(hist) {
   }
 }
 
-function render() {
-  const hist = load(), s = skillScore(hist, weigh), topics = score(hist), svg = $("radar");
-  renderTests(hist);
+// The retry button is redrawn on every new question as well as after an answer: a
+// waiting miss falls due with the clock, so a tab left open overnight must still see it.
+function renderRetry() {
   const Q = queued(), nDue = Q.filter((r) => r.due).length, nWait = Q.length - nDue;
   $("retry").hidden = !Q.length || !!test;
   $("retry").disabled = !nDue;
-  $("retry").textContent = `Retry my misses (${nDue} due${nWait ? ` · ${nWait} waiting a day` : ""})`;
   $("retry").title = "A miss leaves the queue after two right answers at least a day apart.";
+  $("retry").textContent = `Retry my misses (${nDue} due${nWait ? ` · ${nWait} waiting a day` : ""}${nWait && !nDue ? `, next in ${nextDue()}` : ""})`;
+}
+
+function render() {
+  const hist = load(), s = skillScore(hist, weigh), topics = score(hist), svg = $("radar");
+  renderTests(hist);
+  renderRetry();
   svg.textContent = "";
   const R = 120, AX = SKILLS, ang = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / AX.length;
   const pt = (i, r) => [r * R * Math.cos(ang(i)), r * R * Math.sin(ang(i))];
