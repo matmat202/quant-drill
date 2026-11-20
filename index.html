@@ -96,6 +96,7 @@
       <option value="2">2 interview</option><option value="3">3 hard</option></select></label>
     <button id="new">New question</button>
     <button id="mock">Mock test: 10 questions, 20 min</button>
+    <button id="retry" hidden></button>
   </div>
 
   <div class="card" id="qcard">
@@ -140,7 +141,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, TEST_N, TEST_SECONDS } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, retryQueue, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -155,6 +156,12 @@ let bank = [], skillTable = {}, q = null, t0 = 0, tick = null, done = false;
 // A mock test in progress: the dealt questions, how far in, a row per answer, and the
 // clock (performance.now() at the start; the limit is TEST_SECONDS from there).
 let test = null;
+// Retrying misses: serve retryQueue's questions until none is left or another control is
+// used. `lastRetry` is the qid just served, skipped while anything else is queued -- a
+// wrong answer keeps it at the head, and the same question straight back is a memory test.
+let retrying = false, lastRetry = null;
+// The queue as the page can serve it: a qid the current bank no longer holds is dropped.
+const misses = () => retryQueue(load()).filter((id) => byQid().has(id));
 
 for (const a of AXES) $("axis").add(new Option(a, a));
 for (const k of SKILLS) $("skill").add(new Option(k, k));
@@ -205,9 +212,14 @@ const clock = (sec) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).p
 
 function ask() {
   if (test && test.i >= test.qs.length) return endTest();
-  q = test ? test.qs[test.i] : pick(); done = false;
-  const k = test ? "" : targetSkill();
-  $("qmeta").textContent = test ? `mock test · question ${test.i + 1} of ${test.qs.length} · ${q.axis} · difficulty ${q.d}`
+  const queue = retrying ? misses() : [];
+  if (retrying && !queue.length) return endRetry();
+  if (retrying) { lastRetry = queue.find((id) => id !== lastRetry) || queue[0]; q = byQid().get(lastRetry); }
+  else q = test ? test.qs[test.i] : pick();
+  done = false;
+  const k = test || retrying ? "" : targetSkill();
+  $("qmeta").textContent = retrying ? `retrying your misses · ${queue.length} left · ${q.axis} · difficulty ${q.d}`
+    : test ? `mock test · question ${test.i + 1} of ${test.qs.length} · ${q.axis} · difficulty ${q.d}`
     : `${k ? `drilling ${$("skill").value === "auto" ? "(auto) " : ""}${k} · ` : ""}${q.axis} · difficulty ${q.d}`;
   $("qtext").textContent = q.text;
   $("answer").value = ""; $("feedback").textContent = "";
@@ -226,9 +238,11 @@ function ask() {
 // online assessment does: a right/wrong after each one changes how the rest are taken.
 // Every answer is still stored, so the test feeds the radar like any other attempt.
 function startTest() {
+  retrying = false;
   test = { qs: testDraw(bank), i: 0, rows: [], start: performance.now(), id: Date.now() / 1000 };
   for (const id of ["skill", "axis", "diff", "new"]) $(id).disabled = true;
   $("mock").textContent = "End test now";
+  $("retry").hidden = true;
   ask();
   $("qcard").scrollIntoView();
 }
@@ -270,6 +284,14 @@ function endTest() {
   fb.append(head, ol);
   if (T.unsaved) { const w = document.createElement("p"); w.className = "no"; w.textContent = NOT_SAVED; fb.append(w); }
   render();
+}
+
+function endRetry() {
+  retrying = false; done = true; clearInterval(tick);
+  $("qmeta").textContent = "retrying your misses · done"; $("timer").textContent = "";
+  $("qtext").textContent = "Every question you had missed, you have now got right. New question goes back to drilling.";
+  $("mcpad").hidden = $("form").hidden = $("giveup").hidden = true;
+  $("feedback").textContent = "";
 }
 
 // Multiple choice is the default (user, 2026-11-17). Each distractor is the answer a
@@ -358,10 +380,12 @@ $("form").addEventListener("submit", (e) => {
   finish($("answer").value.trim(), ok);
 });
 $("giveup").onclick = () => { if (!done) finish(null, false); };
-$("new").onclick = ask;
+const drill = () => { retrying = false; ask(); };
+$("new").onclick = drill;
 $("mock").onclick = () => (test ? endTest() : startTest());
-$("axis").onchange = $("diff").onchange = $("skill").onchange = ask;
-$("drillnext").onclick = () => { $("skill").value = $("drillnext").dataset.skill; ask(); $("qcard").scrollIntoView(); };
+$("retry").onclick = () => { retrying = true; lastRetry = null; ask(); $("qcard").scrollIntoView(); };
+$("axis").onchange = $("diff").onchange = $("skill").onchange = drill;
+$("drillnext").onclick = () => { retrying = false; $("skill").value = $("drillnext").dataset.skill; ask(); $("qcard").scrollIntoView(); };
 
 const NS = "http://www.w3.org/2000/svg";
 function el(tag, attrs, parent) {
@@ -415,6 +439,9 @@ function renderTests(hist) {
 function render() {
   const hist = load(), s = skillScore(hist, weigh), topics = score(hist), svg = $("radar");
   renderTests(hist);
+  const nMiss = misses().length;
+  $("retry").hidden = !nMiss || !!test;
+  $("retry").textContent = `Retry my misses (${nMiss})`;
   svg.textContent = "";
   const R = 120, AX = SKILLS, ang = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / AX.length;
   const pt = (i, r) => [r * R * Math.cos(ang(i)), r * R * Math.sin(ang(i))];

@@ -319,3 +319,17 @@ export function testHistory(hist) {
   }
   return out.sort((a, b) => b.id - a.id);
 }
+
+// The questions you have not yet got right: every qid whose LATEST attempt (any mode,
+// tests included, a give-up counts) is wrong, most recently missed first. Answering one
+// right makes its latest attempt right, so it leaves the queue with nothing to delete.
+// Qids the current bank no longer holds are the page's to filter -- this sees no bank.
+export function retryQueue(hist) {
+  const last = new Map();
+  for (const a of hist) {
+    if (!a.qid) continue;
+    const b = last.get(a.qid);
+    if (!b || a.t >= b.t) last.set(a.qid, a);
+  }
+  return [...last.values()].filter((a) => !a.correct).sort((a, b) => b.t - a.t).map((a) => a.qid);
+}
