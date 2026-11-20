@@ -133,7 +133,7 @@
   <p id="activity" class="sub act" hidden></p>
   <p><button type="button" id="drillnext" hidden></button></p>
   <div id="pasttests" hidden><h3>Your mock tests</h3><p id="testtrend" class="sub" hidden></p><ul id="testlist" class="sub"></ul></div>
-  <div id="pastretries" hidden><h3>Your retry runs</h3><ul id="retrylist" class="sub"></ul></div>
+  <div id="pastretries" hidden><h3>Your retry runs</h3><p id="runtrend" class="sub" hidden></p><ul id="retrylist" class="sub"></ul></div>
   <p class="sub cap">By <b>topic</b> — what the questions are <i>about</i>. The radar above scores what they <i>exercise</i>, which is what tells you where to practise: one markov question is evidence about setup, conditioning and execution at once.</p>
   <div id="tablewrap"><table id="table"><thead><tr><th>topic</th><th>n</th><th>raw</th><th>accuracy</th><th>speed</th><th>med s</th></tr></thead><tbody></tbody></table></div>
   <p class="small">Accuracy is shrunk toward your overall rate (a prior worth 8 attempts) and measured against
@@ -147,7 +147,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, testTrend, sparkPoints, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, testTrend, runTrend, sparkPoints, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -471,7 +471,7 @@ function renderTrend(T) {
   el.textContent = `Last test ${last.right}/${last.n}, `
     + (mag === "0.0" ? "level with" : `${d > 0 ? "up" : "down"} ${mag} on`)
     + ` your previous ${over === 1 ? "test" : over}.`;
-  el.append(spark(points));
+  el.append(spark(points, "mock tests"));
 }
 
 // Every test so far as one line, drawn after the sentence because the sentence is the
@@ -479,13 +479,13 @@ function renderTrend(T) {
 // line and the picture appear and disappear together on one `hidden` decision -- two
 // would be two things to keep in step. On a 0-1 scale (see sparkPoints), with the newest
 // test marked, since that is the one the sentence is about.
-function spark(points) {
+function spark(points, what) {
   const svg = document.createElementNS(SVGNS, "svg"), line = document.createElementNS(SVGNS, "polyline");
   svg.setAttribute("class", "spark");
   svg.setAttribute("viewBox", `0 0 ${SPARK_W} ${SPARK_H}`);
   svg.setAttribute("width", SPARK_W); svg.setAttribute("height", SPARK_H);
   svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", `${points.length} mock tests, oldest to newest: `
+  svg.setAttribute("aria-label", `${points.length} ${what}, oldest to newest: `
     + points.map((p) => `${p.right} of ${p.n}`).join(", "));
   const pts = sparkPoints(points, SPARK_W, SPARK_H);
   line.setAttribute("points", pts);
@@ -522,6 +522,23 @@ function renderRetries(hist) {
     if (x.missed.length) li.append(missReview(x.missed));
     ol.append(li);
   }
+  renderRunTrend(R);
+}
+
+// The retry runs' direction line. Runs differ in length, so it speaks in percentages, not
+// in questions as the test line does, and names the baseline it compares against -- a
+// pooled rate (see runTrend), which "up 12" alone would hide. Runs under RUN_FLOOR answers
+// are not in it, nor in its sparkline. A difference that rounds to 0% is called level.
+const pct = (r) => `${Math.round(r * 100)}%`;
+function renderRunTrend(R) {
+  const { points, delta, base, over } = runTrend(R), el = $("runtrend");
+  el.hidden = delta === null;
+  if (delta === null) return;
+  const last = points[points.length - 1], d = Math.round(delta * 100);
+  el.textContent = `Last run ${last.right}/${last.n} right (${pct(last.rate)}), `
+    + (d === 0 ? "level with" : `${d > 0 ? "up" : "down"} from`)
+    + ` ${pct(base)} over your previous ${over === 1 ? "run" : over}.`;
+  el.append(spark(points, "retry runs"));
 }
 
 // The retry button is redrawn on every new question as well as after an answer: a

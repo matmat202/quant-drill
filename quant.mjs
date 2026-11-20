@@ -412,6 +412,24 @@ export function retryHistory(hist) {
     .sort((a, b) => b.start - a.start);
 }
 
+// Which way your retry runs are going, the retry list's version of testTrend. A run has no
+// dealt count -- `n` is however many you answered before stopping -- so a 1-question run
+// is a coin flip, not a score, and averaging its 0% or 100% with a 20-question run would
+// let one click swing the line. Two decisions, both deliberate: runs answering fewer than
+// RUN_FLOOR are DROPPED (from the points too, so the line and the sentence agree), and the
+// baseline POOLS the up-to-`back` runs before the newest -- their rights over their
+// answers -- so it is weighted by n rather than a mean of rates. `base` is that pooled
+// rate, `over` how many runs it pools. Under two kept runs there is no trend: delta null.
+export const RUN_FLOOR = 3;
+export function runTrend(rows, back = TREND_BACK, floor = RUN_FLOOR) {
+  const points = rows.filter((x) => x.n >= floor).sort((a, b) => a.start - b.start)
+    .map((x) => ({ id: x.start, right: x.right, n: x.n, rate: x.right / x.n }));
+  if (points.length < 2) return { points, delta: null, base: null, over: 0 };
+  const prev = points.slice(Math.max(0, points.length - 1 - back), points.length - 1);
+  const base = prev.reduce((t, p) => t + p.right, 0) / prev.reduce((t, p) => t + p.n, 0);
+  return { points, delta: points[points.length - 1].rate - base, base, over: prev.length };
+}
+
 // How long until `at`, for a person: whole hours, or minutes under one (never "0").
 export function dueIn(at, now = Date.now() / 1000) {
   const s = Math.max(0, at - now);
