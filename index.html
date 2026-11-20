@@ -28,6 +28,9 @@
   main { max-width: 760px; margin: 0 auto; padding: 20px 16px 60px; }
   h1 { font-size: 22px; margin: 0 0 4px; }
   .sub { color: var(--ink-2); margin: 0 0 18px; font-size: 14px; }
+  .spark { vertical-align: -5px; margin-left: 8px; overflow: visible; }
+  .spark polyline { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; opacity: .55; }
+  .spark circle { fill: currentColor; }
   .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
   /* .row's display:flex outranks the hidden attribute, so a hidden #form still showed. */
   [hidden] { display: none !important; }
@@ -144,7 +147,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, testTrend, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, testTrend, sparkPoints, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -459,6 +462,7 @@ function renderTests(hist) {
 // the rest of this section speaks in. Hidden until there are two tests -- `delta` is null
 // then, and a first test is not an improvement on anything. A difference that rounds to
 // 0.0 is called level rather than printed as "up 0.0".
+const SVGNS = "http://www.w3.org/2000/svg", SPARK_W = 112, SPARK_H = 22;
 function renderTrend(T) {
   const { points, delta, over } = testTrend(T), el = $("testtrend");
   el.hidden = delta === null;
@@ -467,6 +471,29 @@ function renderTrend(T) {
   el.textContent = `Last test ${last.right}/${last.n}, `
     + (mag === "0.0" ? "level with" : `${d > 0 ? "up" : "down"} ${mag} on`)
     + ` your previous ${over === 1 ? "test" : over}.`;
+  el.append(spark(points));
+}
+
+// Every test so far as one line, drawn after the sentence because the sentence is the
+// part that can be read aloud. setting textContent above clears the previous svg, so the
+// line and the picture appear and disappear together on one `hidden` decision -- two
+// would be two things to keep in step. On a 0-1 scale (see sparkPoints), with the newest
+// test marked, since that is the one the sentence is about.
+function spark(points) {
+  const svg = document.createElementNS(SVGNS, "svg"), line = document.createElementNS(SVGNS, "polyline");
+  svg.setAttribute("class", "spark");
+  svg.setAttribute("viewBox", `0 0 ${SPARK_W} ${SPARK_H}`);
+  svg.setAttribute("width", SPARK_W); svg.setAttribute("height", SPARK_H);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `${points.length} mock tests, oldest to newest: `
+    + points.map((p) => `${p.right} of ${p.n}`).join(", "));
+  const pts = sparkPoints(points, SPARK_W, SPARK_H);
+  line.setAttribute("points", pts);
+  svg.append(line);
+  const [cx, cy] = pts.split(" ").pop().split(","), dot = document.createElementNS(SVGNS, "circle");
+  dot.setAttribute("cx", cx); dot.setAttribute("cy", cy); dot.setAttribute("r", "2.5");
+  svg.append(dot);
+  return svg;
 }
 
 function missReview(missed) {

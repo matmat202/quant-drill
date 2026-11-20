@@ -343,6 +343,17 @@ export function testTrend(rows, back = TREND_BACK) {
   return { points, delta: points[points.length - 1].rate - mean, over: prev.length };
 }
 
+// The trend's points as an SVG polyline's `points` attribute, "x,y x,y ...". x is spread
+// evenly across the width; y is the rate on a FIXED 0-1 scale and never autoscaled to the
+// data's own range -- three tests all scoring 5/10 must DRAW flat, and min-max scaling
+// would turn that into a zigzag, which is the one thing a trend line must not do. `pad`
+// keeps a 0/10 or a 10/10 point inside the box rather than half-clipped by its edge.
+export function sparkPoints(points, w, h, pad = 2) {
+  const n = points.length, iw = w - 2 * pad, ih = h - 2 * pad;
+  const r = (v) => +v.toFixed(2);
+  return points.map((p, i) => `${r(n < 2 ? pad + iw / 2 : pad + (i * iw) / (n - 1))},${r(pad + (1 - p.rate) * ih)}`).join(" ");
+}
+
 // The questions you have not yet learned: every qid ever answered wrong (any mode, tests
 // included, a give-up counts) that has not since been got right TWICE, the second right at
 // least RETRY_GAP after the first -- one right straight after reading the working is
