@@ -94,7 +94,7 @@ export function workOnNext(scores) {
   const thin = all.filter((s) => s.n < MIN_FOR_VERDICT);
   if (thin.length) {
     const s = thin.reduce((a, b) => (b.n < a.n ? b : a));
-    return [s.axis, `only ${s.n} attempt${s.n !== 1 ? "s" : ""} -- not enough to know`];
+    return [s.axis, `only ${s.n} attempt${s.n !== 1 ? "s" : ""} — not enough to know`];
   }
   const s = all.reduce((a, b) => (b.accuracy < a.accuracy ? b : a));
   let reason = `lowest accuracy (${Math.round(s.accuracy * 100)}% adjusted, ${s.n_correct}/${s.n} raw)`;
@@ -197,7 +197,7 @@ export function skillWorkOnNext(scores) {
   const thin = all.filter((s) => s.n < MIN_FOR_VERDICT);
   if (thin.length) {
     const s = thin.reduce((a, b) => (b.n < a.n ? b : a));
-    return [s.skill, `only ${s.n.toFixed(1)} attempts' worth -- not enough to know`, ACTIVITY[s.skill]];
+    return [s.skill, `only ${s.n.toFixed(1)} attempts' worth — not enough to know`, ACTIVITY[s.skill]];
   }
   const s = all.reduce((a, b) => (b.accuracy < a.accuracy ? b : a));
   let why = `lowest accuracy (${Math.round(s.accuracy * 100)}% adjusted, over ${s.n.toFixed(1)} attempts' worth)`;

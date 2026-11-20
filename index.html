@@ -95,7 +95,7 @@
 
   <div class="row">
     <label>Skill <select id="skill"><option value="">any</option><option value="auto" selected>auto: what the radar says</option></select></label>
-    <label>Axis <select id="axis"><option value="">mixed</option></select></label>
+    <label>Topic <select id="axis"><option value="">mixed</option></select></label>
     <label>Difficulty <select id="diff">
       <option value="">mixed</option><option value="1">1 warm-up</option>
       <option value="2">2 interview</option><option value="3">3 hard</option></select></label>
@@ -139,9 +139,9 @@
   <p class="sub cap">By <b>topic</b> — what the questions are <i>about</i>. The radar above scores what they <i>exercise</i>, which is what tells you where to practise: one markov question is evidence about setup, conditioning and execution at once.</p>
   <div id="tablewrap"><table id="table"><thead><tr><th>topic</th><th>n</th><th>raw</th><th>accuracy</th><th>speed</th><th>med s</th></tr></thead><tbody></tbody></table></div>
   <p class="small">Accuracy is shrunk toward your overall rate (a prior worth 8 attempts) and measured against
-    your own accuracy at each difficulty, so an axis with few attempts sits near the middle rather than at an
+    your own accuracy at each difficulty, so a topic with few attempts sits near the middle rather than at an
     extreme. Speed is over correct answers only, relative to your usual time at that difficulty: 0.5 is your
-    usual pace and lower is slower. Faded axes have fewer than 5 attempts.</p>
+    usual pace and lower is slower. Faded topics have fewer than 5 attempts.</p>
   <div class="row small">
     <button id="export">Export history</button>
     <label>Import <input type="file" id="import" accept=".json,application/json"></label>
