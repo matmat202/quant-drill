@@ -327,6 +327,22 @@ export function testHistory(hist) {
   return out.sort((a, b) => b.id - a.id);
 }
 
+// Which way your mock tests are going, for the one line under them. Oldest first, so the
+// last point is the newest test; each rate is right out of the DEALT count, the same
+// out-of the score line shows, so a test the clock ended counts what it never reached as
+// wrong. `delta` is the newest rate minus the mean of up to TREND_BACK tests before it,
+// and `over` how many that mean was taken over. Both are null/0 under two tests: a first
+// test is not a change from anything, and inventing a baseline for it would be a lie.
+export const TREND_BACK = 3;
+export function testTrend(rows, back = TREND_BACK) {
+  const points = [...rows].sort((a, b) => a.id - b.id)
+    .map((x) => ({ id: x.id, right: x.right, n: x.n, rate: x.right / x.n }));
+  if (points.length < 2) return { points, delta: null, over: 0 };
+  const prev = points.slice(Math.max(0, points.length - 1 - back), points.length - 1);
+  const mean = prev.reduce((t, p) => t + p.rate, 0) / prev.length;
+  return { points, delta: points[points.length - 1].rate - mean, over: prev.length };
+}
+
 // The questions you have not yet learned: every qid ever answered wrong (any mode, tests
 // included, a give-up counts) that has not since been got right TWICE, the second right at
 // least RETRY_GAP after the first -- one right straight after reading the working is

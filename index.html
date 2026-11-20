@@ -129,7 +129,7 @@
   <p id="next"></p>
   <p id="activity" class="sub act" hidden></p>
   <p><button type="button" id="drillnext" hidden></button></p>
-  <div id="pasttests" hidden><h3>Your mock tests</h3><ul id="testlist" class="sub"></ul></div>
+  <div id="pasttests" hidden><h3>Your mock tests</h3><p id="testtrend" class="sub" hidden></p><ul id="testlist" class="sub"></ul></div>
   <div id="pastretries" hidden><h3>Your retry runs</h3><ul id="retrylist" class="sub"></ul></div>
   <p class="sub cap">By <b>topic</b> — what the questions are <i>about</i>. The radar above scores what they <i>exercise</i>, which is what tells you where to practise: one markov question is evidence about setup, conditioning and execution at once.</p>
   <div id="tablewrap"><table id="table"><thead><tr><th>topic</th><th>n</th><th>raw</th><th>accuracy</th><th>speed</th><th>med s</th></tr></thead><tbody></tbody></table></div>
@@ -144,7 +144,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, testTrend, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -451,6 +451,22 @@ function renderTests(hist) {
     if (x.missed.length) li.append(missReview(x.missed));
     ol.append(li);
   }
+  renderTrend(T);
+}
+
+// One line of direction above the list: the newest test against the mean of up to the
+// three before it, said in questions rather than in rates, because "7 of 10" is the unit
+// the rest of this section speaks in. Hidden until there are two tests -- `delta` is null
+// then, and a first test is not an improvement on anything. A difference that rounds to
+// 0.0 is called level rather than printed as "up 0.0".
+function renderTrend(T) {
+  const { points, delta, over } = testTrend(T), el = $("testtrend");
+  el.hidden = delta === null;
+  if (delta === null) return;
+  const last = points[points.length - 1], d = delta * last.n, mag = Math.abs(d).toFixed(1);
+  el.textContent = `Last test ${last.right}/${last.n}, `
+    + (mag === "0.0" ? "level with" : `${d > 0 ? "up" : "down"} ${mag} on`)
+    + ` your previous ${over === 1 ? "test" : over}.`;
 }
 
 function missReview(missed) {
