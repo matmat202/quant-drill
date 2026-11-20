@@ -82,6 +82,7 @@
   <p class="sub">Generated probability questions with exactly computed answers. Your history stays in this browser.</p>
 
   <div class="row">
+    <label>Skill <select id="skill"><option value="">any</option></select></label>
     <label>Axis <select id="axis"><option value="">mixed</option></select></label>
     <label>Difficulty <select id="diff">
       <option value="">mixed</option><option value="1">1 warm-up</option>
@@ -116,6 +117,7 @@
        role="img" aria-label="radar chart of accuracy and speed per skill"></svg>
   <p id="next"></p>
   <p id="activity" class="sub act" hidden></p>
+  <p><button type="button" id="drillnext" hidden></button></p>
   <p class="sub cap">By <b>topic</b> — what the questions are <i>about</i>. The radar above scores what they <i>exercise</i>, which is what tells you where to practise: one markov question is evidence about setup, conditioning and execution at once.</p>
   <div id="tablewrap"><table id="table"><thead><tr><th>topic</th><th>n</th><th>raw</th><th>accuracy</th><th>speed</th><th>med s</th></tr></thead><tbody></tbody></table></div>
   <p class="small">Accuracy is shrunk toward your overall rate (a prior worth 8 attempts) and measured against
@@ -129,7 +131,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -143,6 +145,7 @@ const NOT_SAVED = "Not saved: this browser refused to store your history (storag
 let bank = [], skillTable = {}, q = null, t0 = 0, tick = null, done = false;
 
 for (const a of AXES) $("axis").add(new Option(a, a));
+for (const k of SKILLS) $("skill").add(new Option(k, k));
 
 // The answer mode is a SETTING, not a per-question checkbox: it has to survive a reload,
 // or "turn multiple choice off" lasts until you close the tab. localStorage can throw in
@@ -153,7 +156,18 @@ function saveMode() {
   try { localStorage.setItem(MODE_KEY, $("numeric").checked ? "numeric" : "mc"); } catch {}
 }
 
+// Targeting a skill overrides axis and difficulty: it serves the one cell that loads on
+// that skill hardest (cellForSkill). The other two selectors are disabled rather than
+// silently ignored, so the page never claims a filter it is not applying.
+function target() {
+  const k = $("skill").value;
+  $("axis").disabled = $("diff").disabled = !!k;
+  return k ? cellForSkill(k, bank, skillTable) : null;
+}
+
 function pick() {
+  const t = target();
+  if (t) { const pool = bank.filter((x) => x.axis === t.axis && x.d === t.d); return pool[Math.floor(Math.random() * pool.length)]; }
   const ax = $("axis").value, d = $("diff").value;
   // Choose the axis and tier first, then a question within it, so conditional's ~3.6k
   // variants do not crowd out expectation's 27.
@@ -165,7 +179,8 @@ function pick() {
 
 function ask() {
   q = pick(); done = false;
-  $("qmeta").textContent = `${q.axis} · difficulty ${q.d}`;
+  const k = $("skill").value;
+  $("qmeta").textContent = `${k ? `drilling ${k} · ` : ""}${q.axis} · difficulty ${q.d}`;
   $("qtext").textContent = q.text;
   $("answer").value = ""; $("feedback").textContent = "";
   renderChoices();
@@ -255,7 +270,8 @@ $("form").addEventListener("submit", (e) => {
 });
 $("giveup").onclick = () => { if (!done) finish(null, false); };
 $("new").onclick = ask;
-$("axis").onchange = $("diff").onchange = ask;
+$("axis").onchange = $("diff").onchange = $("skill").onchange = ask;
+$("drillnext").onclick = () => { $("skill").value = $("drillnext").dataset.skill; ask(); $("qcard").scrollIntoView(); };
 
 const NS = "http://www.w3.org/2000/svg";
 function el(tag, attrs, parent) {
@@ -323,7 +339,11 @@ function render() {
     $("next").textContent = `Work on next: ${skill} — ${why}`;
     $("activity").textContent = activity;
     $("activity").hidden = false;
+    $("drillnext").textContent = `Drill ${skill} now`;
+    $("drillnext").dataset.skill = skill;
+    $("drillnext").hidden = false;
   } else {
+    $("drillnext").hidden = true;
     $("next").textContent = "Answer a few questions to see your radar.";
     $("activity").hidden = true;
   }

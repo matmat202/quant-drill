@@ -206,3 +206,28 @@ export function skillWorkOnNext(scores) {
   if (slow && slow.skill !== s.skill && slow.speed < 0.4) why += `; slowest is ${slow.skill} (speed ${slow.speed.toFixed(2)})`;
   return [s.skill, why, ACTIVITY[s.skill]];
 }
+
+// --- target a skill -----------------------------------------------------------------
+// The (topic, difficulty) cell that exercises `skill` hardest: mean loading of its
+// generators, first cell in bank order on a tie. A port of skills.cell_for_skill, and
+// tests/test_skills.py checks the two pick the same cell for every skill.
+// Why it exists: the mixed picker hands `approximation` ~3% of all evidence, because it
+// lives only in estimation d3 -- without this the sixth vertex practically never fills.
+export function cellForSkill(skill, questions, table) {
+  if (!SKILLS.includes(skill)) throw new Error(`unknown skill ${skill}`);
+  const cells = new Map();
+  for (const q of questions) {
+    const k = `${q.axis}|${q.d}`;
+    if (!cells.has(k)) cells.set(k, new Set());
+    cells.get(k).add(q.gen);
+  }
+  let best = null, bestLoad = -Infinity;
+  for (const [k, gens] of cells) {
+    const d = k.split("|")[1];
+    const loads = [...gens].map((g) => (table[`${g}|${d}`] || {})[skill] || 0);
+    const load = loads.reduce((t, x) => t + x, 0) / loads.length;
+    if (load > bestLoad) { best = k; bestLoad = load; }
+  }
+  const [axis, d] = best.split("|");
+  return { axis, d: +d, load: bestLoad };
+}
