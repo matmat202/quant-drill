@@ -130,6 +130,7 @@
   <p id="activity" class="sub act" hidden></p>
   <p><button type="button" id="drillnext" hidden></button></p>
   <div id="pasttests" hidden><h3>Your mock tests</h3><ul id="testlist" class="sub"></ul></div>
+  <div id="pastretries" hidden><h3>Your retry runs</h3><ul id="retrylist" class="sub"></ul></div>
   <p class="sub cap">By <b>topic</b> — what the questions are <i>about</i>. The radar above scores what they <i>exercise</i>, which is what tells you where to practise: one markov question is evidence about setup, conditioning and execution at once.</p>
   <div id="tablewrap"><table id="table"><thead><tr><th>topic</th><th>n</th><th>raw</th><th>accuracy</th><th>speed</th><th>med s</th></tr></thead><tbody></tbody></table></div>
   <p class="small">Accuracy is shrunk toward your overall rate (a prior worth 8 attempts) and measured against
@@ -143,7 +144,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -352,7 +353,7 @@ function finish(given, correct, errorKind) {
   const h = load();
   h.push({ t: Date.now() / 1000, axis: q.axis, difficulty: q.d, qid: q.qid, answer: q.answer,
            given, correct, seconds, mode: numericMode() ? "numeric" : "mc",
-           error_kind: errorKind || null, ...(fromQid ? { like_of: fromQid } : {}), ...(test ? { test: test.id, test_n: test.qs.length } : {}) });
+           error_kind: errorKind || null, ...(fromQid ? { like_of: fromQid } : {}), ...(test ? { test: test.id, test_n: test.qs.length } : {}), ...(retrying && !test ? { retry: retryStart } : {}) });
   const kept = save(h);
   if (test) {
     test.rows[test.i++] = { q, correct, seconds };
@@ -463,6 +464,19 @@ function renderTests(hist) {
   }
 }
 
+function renderRetries(hist) {
+  const R = retryHistory(hist), ol = $("retrylist");
+  ol.textContent = "";
+  $("pastretries").hidden = !R.length;
+  for (const x of R) {
+    const li = document.createElement("li");
+    const when = new Date(x.start * 1000).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    li.textContent = `${when} · ${x.right} of ${x.n} right`
+      + (x.like ? ` · ${x.like} new one${x.like > 1 ? "s" : ""} like a miss (${x.likeMissed} missed)` : "");
+    ol.append(li);
+  }
+}
+
 // The retry button is redrawn on every new question as well as after an answer: a
 // waiting miss falls due with the clock, so a tab left open overnight must still see it.
 function renderRetry() {
@@ -476,6 +490,7 @@ function renderRetry() {
 function render() {
   const hist = load(), s = skillScore(hist, weigh), topics = score(hist), svg = $("radar");
   renderTests(hist);
+  renderRetries(hist);
   renderRetry();
   svg.textContent = "";
   const R = 120, AX = SKILLS, ang = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / AX.length;

@@ -365,6 +365,17 @@ export function runSummary(hist, since) {
   return { n: xs.length, right, like: likes.length, likeMissed, text };
 }
 
+// Past retry runs, newest first, rebuilt from stored attempts: each answered while retrying
+// carries retry=<the second #retry was clicked>, as a test attempt carries test=<id>.
+// Attempts stored before that stamp existed carry none, so runs older than it do not
+// appear -- they cannot be told apart from drilling, and guessing would invent runs.
+export function retryHistory(hist) {
+  const by = new Map();
+  for (const a of hist) if (a.retry !== undefined) (by.get(a.retry) || by.set(a.retry, []).get(a.retry)).push(a);
+  return [...by].map(([start, xs]) => { const { text, ...r } = runSummary(xs, start); return { start, ...r }; })
+    .sort((a, b) => b.start - a.start);
+}
+
 // How long until `at`, for a person: whole hours, or minutes under one (never "0").
 export function dueIn(at, now = Date.now() / 1000) {
   const s = Math.max(0, at - now);
