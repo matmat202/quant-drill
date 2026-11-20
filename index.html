@@ -474,7 +474,8 @@ function renderRetries(hist) {
     const li = document.createElement("li");
     const when = new Date(x.start * 1000).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
     li.textContent = `${when} · ${x.right} of ${x.n} right`
-      + (x.like ? ` · ${x.like} new one${x.like > 1 ? "s" : ""} like a miss (${x.likeMissed} missed)` : "");
+      + (x.like ? ` · ${x.like} new one${x.like > 1 ? "s" : ""} like a miss (${x.likeMissed} missed)` : "")
+      + (x.weakest ? ` · weakest: ${x.weakest}` : "");
     if (x.missed.length) li.append(missReview(x.missed));
     ol.append(li);
   }

@@ -288,6 +288,21 @@ export function testSummary(rows) {
            seconds: Math.round(answered.reduce((t, r) => t + r.seconds, 0) * 10) / 10, byAxis };
 }
 
+// The lowest right/answered among the axes these attempts reached, ties to the most
+// missed, then AXES order; null when nothing was wrong.
+export function weakestAxis(xs) {
+  const ax = {};
+  for (const a of xs) { const b = (ax[a.axis] ||= { right: 0, n: 0 }); b.n++; if (a.correct) b.right++; }
+  let weakest = null;
+  for (const axis of AXES) {
+    const b = ax[axis];
+    if (!b || b.right === b.n) continue;
+    const w = weakest && ax[weakest];
+    if (!w || b.right / b.n < w.right / w.n || (b.right / b.n === w.right / w.n && b.n - b.right > w.n - w.right)) weakest = axis;
+  }
+  return weakest;
+}
+
 // Past tests, newest first, rebuilt from stored attempts: each carries test=<start epoch>.
 // Only ANSWERED questions are stored, so the out-of count comes from test_n (the dealt
 // count, stamped on every attempt) and the time from test_s (stamped by endTest, so a test
@@ -304,15 +319,7 @@ export function testHistory(hist) {
     const n = Math.max(...xs.map((a) => a.test_n || 0)) || TEST_N;
     const stamped = xs.map((a) => a.test_s).filter((v) => v !== undefined);
     const seconds = stamped.length ? Math.max(...stamped) : Math.max(...xs.map((a) => a.t)) - id;
-    const ax = {};
-    for (const a of xs) { const b = (ax[a.axis] ||= { right: 0, n: 0 }); b.n++; if (a.correct) b.right++; }
-    let weakest = null;
-    for (const axis of AXES) {
-      const b = ax[axis];
-      if (!b || b.right === b.n) continue;
-      const w = weakest && ax[weakest];
-      if (!w || b.right / b.n < w.right / w.n || (b.right / b.n === w.right / w.n && b.n - b.right > w.n - w.right)) weakest = axis;
-    }
+    const weakest = weakestAxis(xs);
     out.push({ id, n, answered: xs.length, right: xs.filter((a) => a.correct).length,
                seconds: Math.min(TEST_SECONDS, Math.max(0, seconds)), weakest,
                missed: xs.filter((a) => !a.correct).sort((a, b) => a.t - b.t).map((a) => a.qid) });
@@ -374,7 +381,7 @@ export function retryHistory(hist) {
   const by = new Map();
   for (const a of hist) if (a.retry !== undefined && a.test === undefined) (by.get(a.retry) || by.set(a.retry, []).get(a.retry)).push(a);
   return [...by].map(([start, xs]) => { const { text, ...r } = runSummary(xs, start);
-    return { start, ...r, missed: xs.filter((a) => !a.correct).sort((a, b) => a.t - b.t).map((a) => a.qid) }; })
+    return { start, ...r, weakest: weakestAxis(xs), missed: xs.filter((a) => !a.correct).sort((a, b) => a.t - b.t).map((a) => a.qid) }; })
     .sort((a, b) => b.start - a.start);
 }
 
