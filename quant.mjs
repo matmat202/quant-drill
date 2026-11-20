@@ -320,16 +320,24 @@ export function testHistory(hist) {
   return out.sort((a, b) => b.id - a.id);
 }
 
-// The questions you have not yet got right: every qid whose LATEST attempt (any mode,
-// tests included, a give-up counts) is wrong, most recently missed first. Answering one
-// right makes its latest attempt right, so it leaves the queue with nothing to delete.
-// Qids the current bank no longer holds are the page's to filter -- this sees no bank.
-export function retryQueue(hist) {
-  const last = new Map();
-  for (const a of hist) {
-    if (!a.qid) continue;
-    const b = last.get(a.qid);
-    if (!b || a.t >= b.t) last.set(a.qid, a);
+// The questions you have not yet learned: every qid ever answered wrong (any mode, tests
+// included, a give-up counts) that has not since been got right TWICE, the second right at
+// least RETRY_GAP after the first -- one right straight after reading the working is
+// recall, not learning. Each row says whether it is `due`: no right since its last miss,
+// or the one right is RETRY_GAP old. A qid right once more recently is waiting a day.
+// Most recently missed first. `now` is seconds, like `t`. Qids the current bank no
+// longer holds are the page's to filter -- this sees no bank.
+export const RETRY_GAP = 86400;
+export function retryQueue(hist, now = Date.now() / 1000) {
+  const by = new Map();
+  for (const a of hist) if (a.qid) (by.get(a.qid) || by.set(a.qid, []).get(a.qid)).push(a);
+  const out = [];
+  for (const [qid, xs] of by) {
+    const miss = Math.max(...xs.filter((a) => !a.correct).map((a) => a.t));
+    if (miss === -Infinity) continue;
+    const rights = xs.filter((a) => a.correct && a.t > miss).map((a) => a.t).sort((a, b) => a - b);
+    if (rights.length >= 2 && rights[rights.length - 1] - rights[0] >= RETRY_GAP) continue;
+    out.push({ qid, miss, due: !rights.length || now - rights[0] >= RETRY_GAP });
   }
-  return [...last.values()].filter((a) => !a.correct).sort((a, b) => b.t - a.t).map((a) => a.qid);
+  return out.sort((a, b) => b.miss - a.miss).map(({ qid, due }) => ({ qid, due }));
 }
