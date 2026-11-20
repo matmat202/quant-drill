@@ -350,6 +350,21 @@ export function retryQueue(hist, now = Date.now() / 1000) {
   return out.sort((a, b) => b.miss - a.miss).map(({ miss, ...r }) => r);
 }
 
+// What one retry run did, for the line endRetry() shows: every attempt stamped at or after
+// `since` (the second #retry was clicked, in `t`'s seconds), test attempts excluded. `like`
+// counts the "new one like an earlier miss" questions -- they carry like_of -- and
+// `likeMissed` how many of those were wrong. `text` is null when nothing was answered.
+export function runSummary(hist, since) {
+  const xs = hist.filter((a) => a.t >= since && a.test === undefined);
+  const right = xs.filter((a) => a.correct).length;
+  const likes = xs.filter((a) => a.like_of);
+  const likeMissed = likes.filter((a) => !a.correct).length;
+  const text = !xs.length ? null
+    : `This run: ${right} of ${xs.length} right` + (likes.length
+      ? `, ${likes.length} new one${likes.length > 1 ? "s" : ""} like a miss tried (${likeMissed} missed).` : ".");
+  return { n: xs.length, right, like: likes.length, likeMissed, text };
+}
+
 // How long until `at`, for a person: whole hours, or minutes under one (never "0").
 export function dueIn(at, now = Date.now() / 1000) {
   const s = Math.max(0, at - now);

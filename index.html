@@ -143,7 +143,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, retryQueue, dueIn, likeThis, TEST_N, TEST_SECONDS } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -161,7 +161,7 @@ let test = null;
 // Retrying misses: serve retryQueue's DUE questions until none is left or another control is
 // used. `lastRetry` is the qid just served, skipped while anything else is queued -- a
 // wrong answer keeps it at the head, and the same question straight back is a memory test.
-let retrying = false, lastRetry = null;
+let retrying = false, lastRetry = null, retryStart = 0;  // retryStart: #retry's click, in t's seconds
 // A fresh question like the one just answered in a retry run (likeThis), served next by
 // ask() in place of the queue. The run stays in retry mode, so Enter after it carries on.
 // `likeOf` is the qid it branched from; ask() hands it to `fromQid`, which finish() stores
@@ -304,10 +304,10 @@ function endTest() {
 function endRetry() {
   retrying = false; done = true; clearInterval(tick);
   $("qmeta").textContent = "retrying your misses · done"; $("timer").textContent = "";
-  const wait = queued().length;
-  $("qtext").textContent = wait
+  const wait = queued().length, run = runSummary(load(), retryStart).text;
+  $("qtext").textContent = (run ? run + " " : "") + (wait
     ? `Nothing is due. ${wait} question${wait > 1 ? "s" : ""} you got right in the last day ${wait > 1 ? "are" : "is"} waiting; the next one is due in ${nextDue()}. A miss leaves the queue after two rights a day apart. New question goes back to drilling.`
-    : "Every question you had missed, you have now got right twice, a day apart. New question goes back to drilling.";
+    : "Every question you had missed, you have now got right twice, a day apart. New question goes back to drilling.");
   $("mcpad").hidden = $("form").hidden = $("giveup").hidden = true;
   $("feedback").textContent = "";
 }
@@ -410,7 +410,7 @@ $("giveup").onclick = () => { if (!done) finish(null, false); };
 const drill = () => { retrying = false; ask(); };
 $("new").onclick = drill;
 $("mock").onclick = () => (test ? endTest() : startTest());
-$("retry").onclick = () => { retrying = true; lastRetry = null; ask(); $("qcard").scrollIntoView(); };
+$("retry").onclick = () => { retrying = true; lastRetry = null; retryStart = Date.now() / 1000; ask(); $("qcard").scrollIntoView(); };
 $("axis").onchange = $("diff").onchange = $("skill").onchange = drill;
 $("drillnext").onclick = () => { retrying = false; $("skill").value = $("drillnext").dataset.skill; ask(); $("qcard").scrollIntoView(); };
 
