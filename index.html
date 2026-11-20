@@ -149,7 +149,7 @@
   </div>
 </main>
 <script type="module">
-import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, radarThen, weekChange, weekLine, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, testTrend, runTrend, sparkPoints, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
+import { AXES, SKILLS, MIN_FOR_VERDICT, checkAnswer, score, route, skillScore, radarThen, weekChange, weekLine, radarLabel, skillWorkOnNext, cellForSkill, autoSkill, testDraw, testSummary, testHistory, testTrend, runTrend, sparkPoints, retryHistory, retryQueue, dueIn, likeThis, runSummary, TEST_N, TEST_SECONDS } from "./quant.mjs";
 
 const KEY = "quant-drill.history.v1";
 const MODE_KEY = "quant-drill.mode.v1";
@@ -578,6 +578,7 @@ function render() {
   // Accuracy a week ago, under today's shapes and unfilled, so the distance between the
   // two outlines is the progress. Accuracy only: two ghosts would bury the speed line.
   const then = radarThen(hist, weigh);
+  svg.setAttribute("aria-label", radarLabel(s));
   $("thenkey").hidden = !then;
   if (then) {
     const tp = AX.map((a, i) => pt(i, Number.isNaN(then[a].accuracy) ? 0.5 : then[a].accuracy));

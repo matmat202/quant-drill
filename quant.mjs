@@ -444,6 +444,18 @@ export function radarThen(hist, weigh, now = Date.now() / 1000, ago = THEN_AGO) 
   return SKILLS.some((k) => s[k].n >= MIN_FOR_VERDICT) ? s : null;
 }
 
+// The radar's aria-label: the chart is otherwise one fixed string to a screen reader.
+// Accuracy only, rounded like the dot titles. A thin skill is named as thin and given no
+// number: its score is mostly the prior, and a NaN would be drawn at 0.5 -- neither is a
+// measurement to read out.
+export function radarLabel(s, floor = MIN_FOR_VERDICT) {
+  const thin = SKILLS.filter((k) => s[k].n < floor || Number.isNaN(s[k].accuracy));
+  const ok = SKILLS.filter((k) => !thin.includes(k)).map((k) => `${k} ${Math.round(s[k].accuracy * 100)}%`);
+  const parts = [ok.length ? `Accuracy by skill: ${ok.join(", ")}` : "No skill has enough attempts for a score yet"];
+  if (thin.length && ok.length) parts.push(`thin (under ${floor} attempts): ${thin.join(", ")}`);
+  return parts.join("; ") + ".";
+}
+
 // The week-ago outline in words, since a dashed polygon is invisible to a screen reader.
 // Only skills with MIN_FOR_VERDICT attempts' worth in BOTH scores count: a thin side is
 // the prior, and "up 20 points" from a prior is the shrinkage letting go, not progress.
